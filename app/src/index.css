@@ -21,6 +21,16 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 
 .panel-divider { width: 1px; background: var(--border); flex-shrink: 0; }
 
+/* ── Development diagnostics ──────────────────────────────────────────────── */
+.debug-toolbar {
+  display: flex; align-items: center; gap: 14px; padding: 5px 12px;
+  border-bottom: 1px solid #fbbf24; background: #fffbeb; flex-shrink: 0;
+  color: #92400e; font-size: 12px;
+}
+.debug-toolbar label { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; }
+.debug-toolbar-links { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; }
+.debug-toolbar a { color: #92400e; }
+
 /* ── Header ───────────────────────────────────────────────────────────────── */
 .app-header {
   display: flex; align-items: center; gap: 14px;

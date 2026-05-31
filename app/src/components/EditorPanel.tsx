@@ -1,11 +1,7 @@
 import {
-  useRef, useState, useCallback, useEffect,
+  memo, useRef, useState, useCallback, useEffect,
   type KeyboardEvent, type ClipboardEvent, type ChangeEvent,
 } from 'react';
-import {
-  useReactTable, getCoreRowModel, getFilteredRowModel,
-  type ColumnDef, type Row,
-} from '@tanstack/react-table';
 import type { SeamlyMeasurement } from '@seamlyme/core';
 import { CATEGORY_LABELS, CATEGORY_LETTERS, idToCategory } from '../catalog';
 import { useAppState, useDispatch, useSetValue } from '../store';
@@ -101,7 +97,7 @@ function RawCell({ name, raw, isModified, onFocus }: RawCellProps) {
 
 // ── Main panel ────────────────────────────────────────────────────────────────
 
-export default function EditorPanel() {
+function EditorPanel() {
   const state    = useAppState();
   const dispatch = useDispatch();
   const { doc, originalRaws, activeCategory, searchQuery, valueFilter, highlighted } = state;
@@ -147,68 +143,6 @@ export default function EditorPanel() {
   }, [dispatch]);
 
   const unit = doc?.unit ?? '';
-
-  const columns: ColumnDef<SeamlyMeasurement>[] = [
-    {
-      id: 'id', header: 'ID', size: 52,
-      cell: ({ row }) => row.original.id
-        ? <code className="badge-id">{row.original.id}</code>
-        : <span className="muted">—</span>,
-    },
-    {
-      id: 'name', header: 'Name',
-      cell: ({ row: { original: m } }) => {
-        const display = m.fullName || m.name;
-        const desc = m.desc && m.desc !== display ? m.desc : '';
-        return (
-          <div className="cell-name">
-            <span className="cell-name-full" title={display}>{display}</span>
-            {desc && <span className="cell-name-desc" title={desc}>{desc}</span>}
-          </div>
-        );
-      },
-    },
-    {
-      id: 'raw', header: 'Raw value (editable)', size: 200,
-      cell: ({ row: { original: m } }) => (
-        <RawCell
-          name={m.name}
-          raw={m.raw}
-          isModified={m.raw !== (originalRaws[m.name] ?? '')}
-          onFocus={() => handleHighlight(m.name)}
-        />
-      ),
-    },
-    {
-      id: 'resolved', header: 'Resolved', size: 130,
-      cell: ({ row: { original: m } }) => {
-        if (!m.hasValue) return <span className="muted">—</span>;
-        if (m.error)     return <span className="is-error" title={m.error}>err</span>;
-        const resolved = fmtVal(m.resolved);
-        const cm = m.resolved != null ? toCm(m.resolved, unit) : null;
-        const formula = isFormula(m.raw);
-        return (
-          <span className={`cell-resolved${formula ? ' is-formula' : ''}`}>
-            {resolved}
-            <span className="unit-label"> {unit}</span>
-            {formula && <span className="badge-formula">f(x)</span>}
-            {cm && <span className="cell-cm">{cm} cm</span>}
-          </span>
-        );
-      },
-    },
-    {
-      id: 'variable', header: 'Variable', size: 160,
-      cell: ({ row }) => <code className="badge-var">{row.original.name}</code>,
-    },
-  ];
-
-  const table = useReactTable({
-    data: filteredRows,
-    columns,
-    getCoreRowModel: getCoreRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
-  });
 
   if (!doc) return null;
 
@@ -277,23 +211,27 @@ export default function EditorPanel() {
         <table className="meas-table">
           <thead>
             <tr>
-              {table.getFlatHeaders().map(h => (
-                <th key={h.id} style={{ width: h.getSize() !== 150 ? h.getSize() : undefined }}>
-                  {typeof h.column.columnDef.header === 'string' ? h.column.columnDef.header : null}
-                </th>
-              ))}
+              <th style={{ width: 52 }}>ID</th>
+              <th>Name</th>
+              <th style={{ width: 200 }}>Raw value (editable)</th>
+              <th style={{ width: 130 }}>Resolved</th>
+              <th style={{ width: 160 }}>Variable</th>
             </tr>
           </thead>
           <tbody>
-            {table.getRowModel().rows.length === 0 && (
+            {filteredRows.length === 0 && (
               <tr><td colSpan={5} className="empty-cell">No measurements match your filters.</td></tr>
             )}
-            {table.getRowModel().rows.map((row: Row<SeamlyMeasurement>) => {
-              const m = row.original;
+            {filteredRows.map(m => {
               const isHighlighted = highlighted === m.name;
+              const display = m.fullName || m.name;
+              const desc = m.desc && m.desc !== display ? m.desc : '';
+              const resolved = fmtVal(m.resolved);
+              const cm = m.resolved != null ? toCm(m.resolved, unit) : null;
+              const formula = isFormula(m.raw);
               return (
                 <tr
-                  key={row.id}
+                  key={m.name}
                   className={[
                     isHighlighted ? 'is-highlighted' : '',
                     m.hasValue && m.error ? 'has-error' : '',
@@ -302,17 +240,34 @@ export default function EditorPanel() {
                   onMouseEnter={() => handleHighlight(m.name)}
                   onMouseLeave={() => handleHighlight(null)}
                 >
-                  {row.getVisibleCells().map(cell => {
-                    const renderer = cell.column.columnDef.cell;
-                    return (
-                      <td key={cell.id}>
-                        {typeof renderer === 'function'
-                          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                          ? (renderer as (ctx: any) => React.ReactNode)(cell.getContext())
-                          : null}
-                      </td>
-                    );
-                  })}
+                  <td>{m.id ? <code className="badge-id">{m.id}</code> : <span className="muted">—</span>}</td>
+                  <td>
+                    <div className="cell-name">
+                      <span className="cell-name-full" title={display}>{display}</span>
+                      {desc && <span className="cell-name-desc" title={desc}>{desc}</span>}
+                    </div>
+                  </td>
+                  <td>
+                    <RawCell
+                      name={m.name}
+                      raw={m.raw}
+                      isModified={m.raw !== (originalRaws[m.name] ?? '')}
+                      onFocus={() => handleHighlight(m.name)}
+                    />
+                  </td>
+                  <td>
+                    {!m.hasValue ? <span className="muted">—</span>
+                      : m.error ? <span className="is-error" title={m.error}>err</span>
+                      : (
+                        <span className={`cell-resolved${formula ? ' is-formula' : ''}`}>
+                          {resolved}
+                          <span className="unit-label"> {unit}</span>
+                          {formula && <span className="badge-formula">f(x)</span>}
+                          {cm && <span className="cell-cm">{cm} cm</span>}
+                        </span>
+                      )}
+                  </td>
+                  <td><code className="badge-var">{m.name}</code></td>
                 </tr>
               );
             })}
@@ -322,3 +277,5 @@ export default function EditorPanel() {
     </div>
   );
 }
+
+export default memo(EditorPanel);

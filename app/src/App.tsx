@@ -1,4 +1,4 @@
-import { Profiler, useCallback, type ProfilerOnRenderCallback } from 'react';
+import { Profiler, useCallback, useState, type ProfilerOnRenderCallback } from 'react';
 import { parseSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
 import EditorPanel   from './components/EditorPanel';
@@ -117,6 +117,13 @@ function Header() {
 
 function Layout() {
   const { doc, highlighted, skinColor, projectionRatioEnabled } = useAppState();
+  const debugParams = new URLSearchParams(window.location.search);
+  const [showDiagram, setShowDiagram] = useState(
+    import.meta.env.DEV ? debugParams.get('diagram') === '1' : true,
+  );
+  const [showFigure, setShowFigure] = useState(
+    import.meta.env.DEV ? debugParams.get('figure') !== '0' : true,
+  );
 
   if (!doc) return (
     <>
@@ -128,21 +135,58 @@ function Layout() {
   return (
     <div className="app-shell">
       <Header />
+      {import.meta.env.DEV && (
+        <div className="debug-toolbar">
+          <strong>Debug panels</strong>
+          <label>
+            <input
+              type="checkbox"
+              checked={showDiagram}
+              onChange={e => setShowDiagram(e.target.checked)}
+            />
+            Embedded SVG diagram
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={showFigure}
+              onChange={e => setShowFigure(e.target.checked)}
+            />
+            Generated body figure
+          </label>
+          <span className="debug-toolbar-links">
+            Reload:
+            <a href="?diagram=0&figure=0">editor only</a>
+            <a href="?diagram=0&figure=1">+ figure</a>
+            <a href="?diagram=1&figure=0">+ diagram</a>
+          </span>
+        </div>
+      )}
       <div className="panels">
-        <EditorPanel />
-        <div className="panel-divider" />
-        <Profiler id="DiagramPanel" onRender={logProfile}>
-          <DiagramPanel highlighted={highlighted} />
+        <Profiler id="EditorPanel" onRender={logProfile}>
+          <EditorPanel />
         </Profiler>
-        <div className="panel-divider" />
-        <Profiler id="FigurePanel" onRender={logProfile}>
-          <FigurePanel
-            doc={doc}
-            highlighted={highlighted}
-            skinColor={skinColor}
-            projectionRatioEnabled={projectionRatioEnabled}
-          />
-        </Profiler>
+        {showDiagram && (
+          <>
+            <div className="panel-divider" />
+            <Profiler id="DiagramPanel" onRender={logProfile}>
+              <DiagramPanel highlighted={highlighted} />
+            </Profiler>
+          </>
+        )}
+        {showFigure && (
+          <>
+            <div className="panel-divider" />
+            <Profiler id="FigurePanel" onRender={logProfile}>
+              <FigurePanel
+                doc={doc}
+                highlighted={highlighted}
+                skinColor={skinColor}
+                projectionRatioEnabled={projectionRatioEnabled}
+              />
+            </Profiler>
+          </>
+        )}
       </div>
     </div>
   );
