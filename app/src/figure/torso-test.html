@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Torso test</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #09090b; color: #e4e4e7;
+      font-family: ui-monospace, monospace; font-size: 12px;
+      display: flex; flex-direction: column; gap: 16px; padding: 16px;
+    }
+    h2 { color: #a1a1aa; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 8px; }
+
+    .cases { display: flex; gap: 16px; flex-wrap: wrap; }
+    .case  { display: flex; gap: 16px; align-items: flex-start; background: #18181b; border-radius: 8px; padding: 12px; }
+    .case h3 { color: #71717a; font-size: 10px; font-weight: 600; margin-bottom: 8px; text-transform: uppercase; }
+
+    svg { background: #27272a; border-radius: 6px; cursor: pointer; flex-shrink: 0; }
+
+    /* landmark hit target */
+    .lm-hit { cursor: pointer; }
+    .lm-hit:hover line { stroke-opacity: 1 !important; }
+    .lm-hit.selected line { stroke-opacity: 1 !important; stroke-width: 2 !important; }
+    .lm-hit.selected text { font-weight: 800; }
+
+    /* detail panel */
+    .detail {
+      width: 340px; background: #09090b; border-radius: 6px; padding: 10px;
+      border: 1px solid #27272a; min-height: 200px;
+    }
+    .detail-empty { color: #52525b; padding: 8px 0; }
+    .detail-id { font-size: 13px; font-weight: 700; color: #e4e4e7; margin-bottom: 10px; }
+
+    .section-label { color: #71717a; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin: 8px 0 4px; }
+    .candidate-row { display: flex; align-items: baseline; gap: 6px; padding: 3px 0; border-bottom: 1px solid #18181b; }
+    .candidate-row:last-child { border-bottom: none; }
+    .tick   { width: 14px; flex-shrink: 0; color: #4ade80; }
+    .no-tick { width: 14px; flex-shrink: 0; color: #3f3f46; }
+    .src    { flex: 1; color: #a1a1aa; }
+    .src.used { color: #e4e4e7; font-weight: 600; }
+    .val    { flex-shrink: 0; color: #71717a; }
+    .val.used { color: #e4e4e7; }
+    .badge  { font-size: 9px; padding: 1px 4px; border-radius: 3px; flex-shrink: 0; }
+    .badge.direct   { background: #14532d; color: #4ade80; }
+    .badge.arc      { background: #713f12; color: #facc15; }
+    .badge.circ     { background: #7c2d12; color: #fb923c; }
+    .badge.canonical{ background: #27272a; color: #52525b; }
+
+    .legend { display: flex; gap: 12px; align-items: center; }
+    .legend-item { display: flex; align-items: center; gap: 4px; font-size: 10px; color: #71717a; }
+    .swatch { width: 10px; height: 10px; border-radius: 2px; }
+
+    .toolbar { display: flex; align-items: center; gap: 12px; }
+    .upload-btn {
+      background: #27272a; border: 1px solid #3f3f46; color: #e4e4e7;
+      padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 11px;
+      font-family: inherit;
+    }
+    .upload-btn:hover { background: #3f3f46; }
+    .upload-label { color: #71717a; font-size: 11px; }
+    .drop-zone {
+      border: 1px dashed #3f3f46; border-radius: 8px; padding: 12px 20px;
+      color: #52525b; font-size: 11px; text-align: center;
+      transition: border-color .15s, color .15s;
+    }
+    .drop-zone.drag-over { border-color: #4ade80; color: #4ade80; }
+
+    .lm-list { display: flex; flex-direction: column; gap: 2px; min-width: 90px; }
+    .lm-list-item {
+      padding: 4px 8px; border-radius: 4px; cursor: pointer;
+      font-size: 10px; color: #71717a; border: 1px solid transparent;
+      white-space: nowrap;
+    }
+    .lm-list-item:hover { background: #27272a; color: #e4e4e7; }
+    .lm-list-item.selected { background: #1c1c1e; border-color: #3f3f46; color: #e4e4e7; font-weight: 700; }
+  </style>
+</head>
+<body>
+<script type="module">
+import { resolveTorsoLandmarks, buildTorsoPath, buildNeckBackLines, buildNecklineCurve, buildBustpointMark } from './torso.ts';
+import { parseSmis } from '@seamlyme/core';
+
+const FULL = {
+  height: 65,
+  height_shoulder_tip: 54,
+  height_neck_front: 55.5,
+  height_armpit: 49,
+  height_bustpoint: 45,
+  height_waist_front: 40.5,
+  height_waist_side: 40,
+  height_neck_back: 57.5,
+  height_neck_side: 57,
+  height_neck_front: 55.5,
+  head_chin_to_neck_back: 6,
+  shoulder_tip_to_shoulder_tip_f: 15,
+  neck_width: 5,
+  highbust_arc_f: 16.5,
+  bust_arc_f: 18,
+  lowbust_arc_f: 16,
+  rib_arc_f: 15,
+  waist_arc_f: 13.5,
+  bustpoint_to_bustpoint: 7,
+  across_chest_f: 13,
+};
+
+const ARCS_ONLY = { ...FULL };
+
+const MINIMAL = {
+  height: 65,
+  height_bustpoint: 45,
+  height_waist_side: 40,
+};
+
+let CASES = [
+  { label: 'Full measurements', R: FULL },
+  { label: 'Arcs only',         R: ARCS_ONLY },
+  { label: 'Minimal',           R: MINIMAL },
+];
+
+const PAD = 20, BODY_H = 420, AXIS_X = 80;
+
+function clrFor(c) {
+  return c === 'direct' ? '#4ade80' : c === 'arc' ? '#facc15' : c === 'circ' ? '#fb923c' : '#52525b';
+}
+
+function buildSvg(resolved, totalH) {
+  const { outline, interior } = resolved;
+  const neckLandmarks = [
+    resolved.neckBack,
+    resolved.neckline?.side,
+    resolved.neckline?.front,
+  ].filter(Boolean);
+  const allLandmarks = [...neckLandmarks, ...outline, ...interior];
+  const scale = BODY_H / totalH;
+  const toY = h => PAD + (totalH - h) * scale;
+  const svgW = AXIS_X * 2 + 40, svgH = BODY_H + PAD * 2;
+  const pathOpts = { axisX: AXIS_X, toY, scale, fill: '#f2c6a0', stroke: '#8a5a44', fillOpacity: 0.18, strokeOpacity: 0.6 };
+
+  const outlineSvg = buildTorsoPath(outline, pathOpts);
+
+  const neckBackLinesSvg = (resolved.neckline && resolved.neckBack)
+    ? buildNeckBackLines(resolved.neckline.side, resolved.neckBack, { ...pathOpts, color: '#71717a' })
+    : '';
+
+  const necklineSvg = resolved.neckline
+    ? buildNecklineCurve(resolved.neckline, { ...pathOpts, color: '#a1a1aa' })
+    : '';
+
+  // neck-back reference guide line
+  const neckBackSvg = resolved.neckBack ? (() => {
+    const l = resolved.neckBack;
+    const y  = toY(l.y).toFixed(1);
+    const hw = ((l.halfW ?? 0) * scale).toFixed(1);
+    return `<g class="lm-hit" data-id="neck-back">
+      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="#71717a" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="2 3"/>
+      <circle cx="${AXIS_X}" cy="${y}" r="2" fill="#71717a" opacity="0.6"/>
+      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="#71717a">neck-back</text>
+    </g>`;
+  })() : '';
+
+  const bustpointSvg = interior
+    .map(l => buildBustpointMark(l, pathOpts))
+    .join('');
+
+  const guideLines = outline.map(l => {
+    const y  = toY(l.y).toFixed(1);
+    const hw = ((l.halfW ?? 0) * scale).toFixed(1);
+    const clr = clrFor(l.widthConfidence);
+    return `<g class="lm-hit" data-id="${l.id}">
+      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
+      <circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}" opacity="0.7"/>
+      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+    </g>`;
+  }).join('');
+
+  // interior landmark hit targets (bustpoint etc.)
+  const interiorGuides = interior.map(l => {
+    const y  = toY(l.y).toFixed(1);
+    const hw = ((l.halfW ?? 0) * scale).toFixed(1);
+    return `<g class="lm-hit" data-id="${l.id}">
+      <rect x="${AXIS_X - +hw - 4}" y="${+y - 6}" width="${+hw * 2 + 8}" height="12" fill="transparent"/>
+      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="#fc8d62">${l.id}</text>
+    </g>`;
+  }).join('');
+
+  const floor = `<line x1="0" y1="${PAD + BODY_H}" x2="${svgW}" y2="${PAD + BODY_H}" stroke="#3f3f46" stroke-width="1"/>`;
+
+  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}</svg>`, allLandmarks };
+}
+
+function buildDetailPanel(landmark) {
+  if (!landmark) return `<div class="detail-empty">Click a landmark to inspect it</div>`;
+
+  function candidateTable(candidates, prefix) {
+    if (!candidates.length) return `<div style="color:#52525b;font-size:11px">no candidates</div>`;
+    return candidates.map(c => {
+      const used = c.used;
+      const badge = prefix === 'w'
+        ? `<span class="badge ${c.confidence ?? ''}">${c.confidence ?? ''}</span>` : '';
+      return `<div class="candidate-row">
+        <span class="${used ? 'tick' : 'no-tick'}">${used ? '✓' : '·'}</span>
+        <span class="src ${used ? 'used' : ''}">${c.source}</span>
+        ${badge}
+        <span class="val ${used ? 'used' : ''}">${c.value.toFixed(3)}</span>
+      </div>`;
+    }).join('');
+  }
+
+  return `
+    <div class="detail-id">${landmark.id}</div>
+    <div class="section-label">Height (Y) candidates</div>
+    ${candidateTable(landmark.yCandidates, 'h')}
+    <div class="section-label">Width candidates</div>
+    ${candidateTable(landmark.wCandidates, 'w')}
+  `;
+}
+
+// ── Cases container (populated by renderAll) ──────────────────────────────────
+const casesEl = document.createElement('div');
+casesEl.className = 'cases';
+
+// ── Legend ────────────────────────────────────────────────────────────────────
+const legendEl = document.createElement('div');
+legendEl.className = 'legend';
+legendEl.innerHTML = [
+  ['#14532d','#4ade80','direct measurement'],
+  ['#713f12','#facc15','arc projection'],
+  ['#7c2d12','#fb923c','circumference ÷ 2π'],
+  ['#27272a','#52525b','canonical fallback'],
+].map(([bg,fg,label]) =>
+  `<div class="legend-item"><div class="swatch" style="background:${bg};outline:1px solid ${fg}"></div>${label}</div>`
+).join('');
+
+// ── Toolbar + drop zone ───────────────────────────────────────────────────────
+const toolbarEl = document.createElement('div');
+toolbarEl.className = 'toolbar';
+toolbarEl.innerHTML = `
+  <button class="upload-btn">Upload .smis file</button>
+  <input type="file" accept=".smis,.xml,.vit" style="display:none"/>
+  <span class="upload-label" id="upload-label">or drop anywhere</span>
+`;
+
+const fileInput = toolbarEl.querySelector('input');
+const uploadBtn = toolbarEl.querySelector('.upload-btn');
+const uploadLabel = toolbarEl.querySelector('#upload-label');
+
+uploadBtn.addEventListener('click', () => fileInput.click());
+fileInput.addEventListener('change', e => {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+// drag & drop on whole page
+document.addEventListener('dragover', e => { e.preventDefault(); document.body.classList.add('drag-over'); });
+document.addEventListener('dragleave', () => document.body.classList.remove('drag-over'));
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  document.body.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+});
+
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const doc = parseSmis(e.target.result);
+      const R = {};
+      for (const [name, m] of Object.entries(doc.measurements)) {
+        R[name] = m.resolved ?? 0;
+      }
+      CASES = [{ label: file.name, R }];
+      uploadLabel.textContent = file.name;
+      renderAll();
+    } catch (err) {
+      uploadLabel.textContent = `Error: ${err.message}`;
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderAll() {
+  casesEl.innerHTML = '';
+  for (const { label, R } of CASES) {
+    const totalH = R.height > 0 ? R.height : 65;
+    const resolved = resolveTorsoLandmarks(R, totalH);
+    const { html: svgHtml, allLandmarks } = buildSvg(resolved, totalH);
+
+    const caseEl = document.createElement('div');
+    caseEl.className = 'case';
+
+    const leftEl = document.createElement('div');
+    leftEl.innerHTML = `<h3>${label}</h3>` + svgHtml;
+
+    // Landmark list — outline + interior separated
+    const listEl = document.createElement('div');
+    listEl.className = 'lm-list';
+    const neckItems = [
+      resolved.neckBack    ? `<div class="lm-list-item" data-id="neck-back"  style="border-left:2px solid #52525b">neck-back</div>`  : '',
+      resolved.neckline    ? `<div class="lm-list-item" data-id="neck-side"  style="border-left:2px solid #a1a1aa">neck-side</div>`  : '',
+      resolved.neckline    ? `<div class="lm-list-item" data-id="neck-front" style="border-left:2px solid #a1a1aa">neck-front</div>` : '',
+    ].join('');
+
+    listEl.innerHTML =
+      neckItems +
+      (neckItems ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      resolved.outline.filter(l => !l.id.startsWith('neck')).map(l => {
+        const clr = clrFor(l.widthConfidence);
+        return `<div class="lm-list-item" data-id="${l.id}" style="border-left:2px solid ${clr}">${l.id}</div>`;
+      }).join('') +
+      (resolved.interior.length ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      resolved.interior.map(l =>
+        `<div class="lm-list-item" data-id="${l.id}" style="border-left:2px solid #fc8d62">${l.id}</div>`
+      ).join('');
+
+    const detailEl = document.createElement('div');
+    detailEl.className = 'detail';
+    detailEl.innerHTML = buildDetailPanel(null);
+
+    function selectLandmark(id) {
+      leftEl.querySelectorAll('.lm-hit.selected').forEach(el => el.classList.remove('selected'));
+      leftEl.querySelector(`.lm-hit[data-id="${id}"]`)?.classList.add('selected');
+      listEl.querySelectorAll('.lm-list-item.selected').forEach(el => el.classList.remove('selected'));
+      listEl.querySelector(`.lm-list-item[data-id="${id}"]`)?.classList.add('selected');
+      detailEl.innerHTML = buildDetailPanel(allLandmarks.find(l => l.id === id));
+    }
+
+    leftEl.querySelector('svg').addEventListener('click', e => {
+      const hit = e.target.closest('.lm-hit');
+      if (!hit) return;
+      selectLandmark(hit.dataset.id);
+    });
+
+    listEl.addEventListener('click', e => {
+      const item = e.target.closest('.lm-list-item');
+      if (!item) return;
+      selectLandmark(item.dataset.id);
+    });
+
+    caseEl.appendChild(leftEl);
+    caseEl.appendChild(listEl);
+    caseEl.appendChild(detailEl);
+    casesEl.appendChild(caseEl);
+  }
+}
+
+document.body.appendChild(legendEl);
+document.body.appendChild(toolbarEl);
+document.body.appendChild(casesEl);
+
+renderAll();
+</script>
+</body>
+</html>
