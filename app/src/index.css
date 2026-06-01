@@ -91,12 +91,14 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 }
 
 .category-selector-shell {
-  position: relative; min-width: 0; flex-shrink: 0; background: var(--bg);
+  display: flex; align-items: center; min-width: 0; flex-shrink: 0;
+  border-bottom: 1px solid var(--border); background: var(--bg);
 }
 .category-selector-shell-mobile { display: none; }
+.category-selector-scroll-area { position: relative; min-width: 0; flex: 1 1 auto; }
 .category-selector {
   display: flex; align-items: center; gap: 4px; padding: 5px 28px;
-  border-bottom: 1px solid var(--border); background: var(--bg);
+  background: var(--bg);
   overflow-x: auto; flex-shrink: 0; scrollbar-width: none;
 }
 .category-selector::-webkit-scrollbar { display: none; }
@@ -126,6 +128,13 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   white-space: nowrap; font-family: inherit; transition: background .15s, color .15s, transform .15s, box-shadow .15s, padding .15s, max-width .15s;
 }
 .cat-tab:hover { background: var(--surface); color: var(--text); }
+.cat-tab-errors {
+  flex-shrink: 0; margin-left: 5px; padding: 0 8px 0 4px;
+  border-color: #fecaca; background: #fef2f2; color: #b91c1c;
+  box-shadow: 5px 0 7px var(--bg); white-space: nowrap;
+}
+.cat-tab-errors:hover { background: #fee2e2; color: #991b1b; }
+.cat-tab-errors .cat-tab-chip { background: #dc2626; }
 .cat-tab.is-active {
   background: var(--surface);
   color: var(--text);
@@ -133,6 +142,10 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   padding: 0 12px 0 8px;
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(109, 40, 217, 0.12);
+}
+.cat-tab-errors.is-active {
+  border-color: #dc2626; background: #fef2f2; color: #991b1b;
+  box-shadow: 5px 0 7px var(--bg), 0 6px 16px rgba(220, 38, 38, .12);
 }
 .cat-tab-letter { font-variant-numeric: tabular-nums; }
 .cat-tab-chip {
@@ -225,24 +238,98 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 /* Compact measurement list + bottom editor */
 .measurement-list { flex: 1; min-height: 0; overflow: auto; padding: 10px; background: var(--surface); }
 .measurement-list-row {
-  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 9px; align-items: center;
-  width: 100%; padding: 8px 7px; border: 0; border-bottom: 1px solid var(--border);
-  background: transparent; color: var(--text); text-align: left; cursor: pointer; font-family: inherit;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch;
+  width: 100%; border-bottom: 1px solid var(--border); background: transparent; color: var(--text);
 }
 .measurement-list-row:hover { background: #fafafa; }
 .measurement-list-row.is-missing { background: #fffbeb; }
+.measurement-list-row.has-error {
+  border-color: #fecaca; background: #fef2f2; box-shadow: inset 3px 0 #dc2626;
+}
+.measurement-list-row.has-error:hover { background: #fee2e2; }
 .measurement-list-row.is-highlighted, .measurement-list-row.is-selected { background: var(--accent-l); }
+.measurement-list-row.has-error.is-highlighted,
+.measurement-list-row.has-error.is-selected { background: #fee2e2; }
 .measurement-list-row.is-missing .measurement-list-calculated { color: #b45309; }
+.measurement-list-select {
+  display: grid; grid-template-columns: 48px minmax(0, 1fr) auto; gap: 9px; align-items: center;
+  min-width: 0; padding: 8px 7px; border: 0; background: transparent;
+  color: var(--text); text-align: left; cursor: pointer; font-family: inherit;
+}
+.measurement-list-jump {
+  align-self: center; margin-right: 5px; padding: 3px 5px;
+  border: 1px solid #c4b5fd; border-radius: 5px; background: var(--surface);
+  color: var(--accent); cursor: pointer; font-family: inherit; font-size: 10px; font-weight: 800;
+  white-space: nowrap;
+}
+.measurement-list-jump:hover { background: var(--accent-l); }
 .measurement-list-name { min-width: 0; }
 .measurement-list-name strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .measurement-list-name code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; color: var(--muted); font-size: 11px; }
-.measurement-list-calculated { justify-self: end; color: #0369a1; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.measurement-list-calculated {
+  width: 150px; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  color: #0369a1; font-family: var(--mono); font-size: 12px; font-weight: 700; text-align: left; white-space: nowrap;
+}
+.measurement-list-calculated-line {
+  display: grid; grid-template-columns: 10px 62px minmax(0, 1fr); gap: 4px; align-items: baseline;
+}
+.measurement-list-calculated-line.is-secondary { color: var(--muted); font-weight: 500; }
+.measurement-list-calculated-number {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.measurement-list-calculated.is-error { color: #dc2626; }
 
 .measurement-editor-panel { flex-shrink: 0; border-top: 1px solid var(--border); background: #fafafa; }
+.measurement-editor-actions {
+  display: flex; align-items: center; gap: 4px; padding: 4px 10px 0;
+}
+.measurement-editor-search {
+  position: relative; min-width: 88px; flex: 1 1 auto;
+}
+.measurement-editor-search svg {
+  position: absolute; left: 6px; top: 50%; width: 12px; height: 12px;
+  transform: translateY(-50%); fill: none; stroke: var(--muted);
+  stroke-width: 1.7; stroke-linecap: round; pointer-events: none;
+}
+.measurement-editor-search input {
+  width: 100%; height: 22px; padding: 0 25px 0 22px;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--text); font-family: inherit; font-size: 11px; outline: none;
+}
+.measurement-editor-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-l); }
+.measurement-editor-actions button {
+  display: inline-flex; align-items: center; gap: 3px; min-height: 22px; padding: 2px 7px;
+  border: 1px solid var(--border); border-radius: 5px; background: var(--surface);
+  color: var(--text); cursor: pointer; font-family: inherit; font-size: 11px; font-weight: 700;
+}
+.measurement-editor-actions button:hover { background: var(--bg); }
+.measurement-editor-action-icon {
+  width: 12px; height: 12px; fill: none; stroke: currentColor;
+  stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round;
+}
+.measurement-editor-actions .measurement-editor-global-search {
+  position: absolute; right: 1px; top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; min-height: 20px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--muted);
+}
+.measurement-editor-global-search svg {
+  width: 12px; height: 12px; fill: none; stroke: currentColor;
+  stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round;
+}
+.measurement-editor-actions .measurement-editor-global-search.is-active {
+  background: var(--accent-l); color: var(--accent);
+}
+.measurement-editor-actions .measurement-editor-restore-search {
+  border-color: #c4b5fd; background: var(--accent-l); color: var(--accent);
+}
+.measurement-editor-actions .measurement-editor-restore-search:hover { background: #ddd6fe; }
+.measurement-editor-actions button.is-danger { color: #b91c1c; }
+.measurement-editor-actions button:disabled { color: var(--muted); cursor: default; opacity: .55; }
+.measurement-editor-actions button:disabled:hover { background: var(--surface); }
 .measurement-editor { display: flex; flex-direction: column; }
 .measurement-editor, .measurement-editor-empty { padding: 6px 10px; }
 .measurement-editor-empty { color: var(--muted); font-size: 12px; text-align: center; }
-.measurement-editor-desc { margin-top: 1px; color: var(--muted); font-size: 10px; }
 .measurement-editor-row { display: grid; gap: 7px; align-items: end; }
 .measurement-editor-row + .measurement-editor-row { margin-top: 5px; }
 .identity-row { grid-template-columns: minmax(0, 1fr) minmax(180px, 1fr); }
@@ -257,12 +344,45 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   background: var(--surface); color: var(--text); font-family: var(--mono); font-size: 12px; outline: none;
 }
 .measurement-editor-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-l); }
+.measurement-editor-row input:disabled {
+  border-color: var(--border); background: var(--bg); color: var(--muted); cursor: not-allowed;
+}
+.measurement-description-field {
+  display: flex; flex-direction: column; min-width: 0; min-height: 0; margin-top: 5px;
+}
+.measurement-description-field > span {
+  display: block; margin-bottom: 2px; color: var(--muted);
+  font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+}
+.measurement-description-field textarea {
+  display: block; width: 100%; min-height: 38px; flex: 1 1 auto; padding: 4px 6px;
+  resize: vertical; border: 1px solid var(--border); border-radius: 5px;
+  background: var(--surface); color: var(--text); font-family: inherit; font-size: 11px; outline: none;
+}
+.measurement-description-field textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-l); }
 .calculation-arrow { align-self: end; padding: 5px 0; color: var(--muted); font-family: var(--mono); font-weight: 700; }
 .calculated-field { padding: 3px 7px; border: 1px solid #bae6fd; border-radius: 5px; background: #f0f9ff; }
 .calculated-field strong { display: block; color: #0369a1; white-space: nowrap; }
+.calculated-field strong.is-error { color: #dc2626; }
+.measurement-editor-dependency-section { min-width: 0; margin-top: 5px; }
+.measurement-editor-dependency-toggle {
+  display: flex; align-items: center; gap: 6px; width: 100%; padding: 4px 6px;
+  border: 1px solid var(--border); border-radius: 6px; background: var(--surface);
+  color: var(--text); cursor: pointer; font-family: inherit; text-align: left;
+}
+.measurement-editor-dependency-toggle:hover { border-color: #c4b5fd; background: var(--accent-l); }
+.measurement-editor-dependency-toggle > span:first-child {
+  font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase;
+}
+.measurement-editor-dependency-toggle-hint { margin-left: auto; color: var(--muted); font-size: 10px; }
+.measurement-editor-dependency-toggle svg {
+  width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2;
+  stroke-linecap: round; stroke-linejoin: round; transition: transform .15s;
+}
+.measurement-editor-dependency-section.is-expanded .measurement-editor-dependency-toggle svg { transform: rotate(180deg); }
 .measurement-editor-dependencies {
   display: flex; gap: 8px;
-  margin-top: 4px; height: clamp(88px, 15vh, 128px);
+  margin-top: 4px; height: clamp(70px, 12vh, 108px);
 }
 .measurement-editor-links {
   display: flex; flex-direction: column; align-content: flex-start; gap: 3px; color: var(--muted); font-size: 10px;
@@ -356,7 +476,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   .app-filename, .header-pills { display: none; }
   .debug-toolbar { display: none; }
   .category-selector-shell-desktop { display: none; }
-  .category-selector-shell-mobile { display: block; min-height: 0; border-top: 1px solid var(--border); }
+  .category-selector-shell-mobile { display: flex; min-height: 0; border-top: 1px solid var(--border); }
   .category-selector-mobile { display: flex; padding: .28rem 28px; }
   .cat-tab { height: auto; min-height: 1.86rem; padding: .12rem .57rem; }
   .cat-tab.is-active { padding: .12rem .71rem .12rem .5rem; }
@@ -385,17 +505,32 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   }
   .editor-toolbar { display: none; }
   .measurement-list { padding: 0 6px; }
-  .measurement-list-row { min-height: 50px; padding: 6px 4px; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 6px; }
+  .measurement-list-select { padding: 6px 4px; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 6px; }
   .measurement-list-name strong { font-size: 11px; }
-  .measurement-list-calculated { max-width: 112px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
-  .measurement-editor-panel { min-height: 180px; max-height: none; overflow: hidden; }
+  .measurement-list-calculated { width: 112px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
+  .measurement-list-calculated-line { grid-template-columns: 8px 53px minmax(0, 1fr); gap: 3px; }
+  .measurement-editor-panel {
+    display: flex; flex-direction: column;
+    min-height: 180px; max-height: none; overflow: hidden;
+  }
+  .measurement-editor-actions { padding-inline: 6px; }
+  .measurement-editor-actions button { padding-inline: 5px; }
   .measurement-editor {
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr) auto;
-    height: 100%;
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
     overflow: hidden;
   }
+  .measurement-description-field textarea {
+    min-height: 32px; height: 100%; resize: none;
+  }
+  .measurement-editor-dependency-section.is-expanded {
+    display: flex; flex-direction: column; min-height: 0;
+  }
   .measurement-editor-dependencies {
+    flex: 1 1 auto;
     align-self: stretch;
     height: auto;
     min-height: 0;

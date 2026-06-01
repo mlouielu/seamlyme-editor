@@ -1,5 +1,6 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import type { SeamlyMeasurement } from '@seamlyme/core';
+import { idToCategory } from '../catalog';
 import { useAppState, useDispatch } from '../store';
 
 function fmtVal(v: number | null | undefined): string {
@@ -11,12 +12,12 @@ function toCm(val: number, unit: string): string | null {
   let cm: number | null = null;
   if (unit === 'inch' || unit === 'in') cm = val * 2.54;
   else if (unit === 'mm') cm = val / 10;
-  return cm !== null ? cm.toFixed(1).replace(/\.0$/, '') : null;
+  return cm !== null ? cm.toFixed(2) : null;
 }
 
 function calculatedText(m: SeamlyMeasurement, unit: string): string {
   if (!m.hasValue) return 'Not set';
-  if (m.error) return 'Formula error';
+  if (m.error) return m.error;
   const cm = m.resolved != null ? toCm(m.resolved, unit) : null;
   return `= ${fmtVal(m.resolved)} ${unit}${cm ? ` (${cm} cm)` : ''}`;
 }
@@ -27,7 +28,7 @@ interface MeasurementEditorProps {
   unit: string;
   dependents: string[];
   nameExists: (name: string) => boolean;
-  onApply: (oldName: string, newName: string, value: string) => void;
+  onApply: (oldName: string, newName: string, value: string, description: string) => void;
   onSelectVariable: (name: string) => void;
 }
 
@@ -97,14 +98,18 @@ function MeasurementEditor({
 }: MeasurementEditorProps) {
   const [variable, setVariable] = useState(measurement.name);
   const [value, setValue] = useState(measurement.raw);
+  const [description, setDescription] = useState(measurement.desc);
+  const [dependenciesExpanded, setDependenciesExpanded] = useState(false);
   const [error, setError] = useState('');
   const timerRef = useRef<number | null>(null);
+  const canRename = !idToCategory(measurement.id);
 
   useEffect(() => {
     setVariable(measurement.name);
     setValue(measurement.raw);
+    setDescription(measurement.desc);
     setError('');
-  }, [measurement.name, measurement.raw]);
+  }, [measurement.desc, measurement.name, measurement.raw]);
 
   function validate(): string | null {
     const nextVariable = variable.trim();
@@ -126,8 +131,12 @@ function MeasurementEditor({
     }
     setError('');
     const nextVariable = variable.trim();
-    if (nextVariable === measurement.name && value === measurement.raw) return;
-    onApply(measurement.name, nextVariable, value);
+    if (
+      nextVariable === measurement.name
+      && value === measurement.raw
+      && description === measurement.desc
+    ) return;
+    onApply(measurement.name, nextVariable, value, description);
   }
 
   useEffect(() => {
@@ -138,14 +147,18 @@ function MeasurementEditor({
     }
     setError('');
     const nextVariable = variable.trim();
-    if (nextVariable === measurement.name && value === measurement.raw) return;
+    if (
+      nextVariable === measurement.name
+      && value === measurement.raw
+      && description === measurement.desc
+    ) return;
     timerRef.current = window.setTimeout(applyImmediately, 400);
     return () => {
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     };
   // `validate` and `applyImmediately` intentionally read the current render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [measurement.name, measurement.raw, nameExists, onApply, value, variable]);
+  }, [description, measurement.desc, measurement.name, measurement.raw, nameExists, onApply, value, variable]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return;
@@ -168,10 +181,10 @@ function MeasurementEditor({
         <label className="variable-field">
           <span>Variable name</span>
           <input value={variable} onChange={e => setVariable(e.target.value)}
-            onKeyDown={onKeyDown} spellCheck={false} />
+            onKeyDown={onKeyDown} spellCheck={false} disabled={!canRename}
+            title={!canRename ? 'Pre-defined variable names cannot be changed' : undefined} />
         </label>
       </div>
-      {measurement.desc && <div className="measurement-editor-desc">{measurement.desc}</div>}
       <div className="measurement-editor-row calculation-row">
         <label className="formula-field">
           <span>Formula or value</span>
@@ -180,17 +193,40 @@ function MeasurementEditor({
         </label>
         <span className="calculation-arrow" aria-hidden="true">-&gt;</span>
         <div className="calculated-field">
-          <span>Read-only result</span>
+          <span>Resolved Value</span>
           <strong className={measurement.error ? 'is-error' : ''}>
             {calculatedText(measurement, unit)}
           </strong>
         </div>
       </div>
-      <div className="measurement-editor-dependencies">
-        <DependencyTree names={measurement.dependencies} measurements={measurements}
-          onSelect={onSelectVariable} />
-        <DependencyLinks label="Used by" names={dependents}
-          nameExists={nameExists} onSelect={onSelectVariable} />
+      {!dependenciesExpanded && (
+        <label className="measurement-description-field">
+          <span>Measurement description</span>
+          <textarea value={description} rows={2}
+            onChange={e => setDescription(e.target.value)}
+            placeholder="Add notes or measurement instructions" />
+        </label>
+      )}
+      <div className={`measurement-editor-dependency-section${dependenciesExpanded ? ' is-expanded' : ''}`}>
+        <button type="button" className="measurement-editor-dependency-toggle"
+          aria-expanded={dependenciesExpanded}
+          onClick={() => setDependenciesExpanded(expanded => !expanded)}>
+          <span>Dependencies</span>
+          <span className="measurement-editor-dependency-toggle-hint">
+            {dependenciesExpanded ? 'Hide' : 'Show uses and used by'}
+          </span>
+          <svg viewBox="0 0 16 16" aria-hidden="true">
+            <path d="m4 6 4 4 4-4" />
+          </svg>
+        </button>
+        {dependenciesExpanded && (
+          <div className="measurement-editor-dependencies">
+            <DependencyTree names={measurement.dependencies} measurements={measurements}
+              onSelect={onSelectVariable} />
+            <DependencyLinks label="Used by" names={dependents}
+              nameExists={nameExists} onSelect={onSelectVariable} />
+          </div>
+        )}
       </div>
       {error && <div className="measurement-editor-error">{error}</div>}
     </div>
@@ -198,9 +234,10 @@ function MeasurementEditor({
 }
 
 function MeasurementEditorPanel() {
-  const { doc, selected } = useAppState();
+  const { doc, globalSearch, searchQuery, searchSnapshot, selected } = useAppState();
   const dispatch = useDispatch();
   const measurement = doc && selected ? doc.measurements[selected] : null;
+  const canRemove = measurement ? !idToCategory(measurement.id) : false;
   const dependents = doc && measurement
     ? Object.values(doc.measurements)
       .filter(candidate => candidate.dependencies.includes(measurement.name))
@@ -209,12 +246,63 @@ function MeasurementEditorPanel() {
 
   return (
     <section className="measurement-editor-panel" aria-label="Measurement editor">
+      {doc && (
+        <div className="measurement-editor-actions" aria-label="Variable actions">
+          <label className="measurement-editor-search">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path d="m11.5 11.5 3 3" />
+              <circle cx="7" cy="7" r="4.5" />
+            </svg>
+            <input type="search" placeholder="Search measurements"
+              value={searchQuery}
+              onChange={e => dispatch({ type: 'SET_SEARCH', query: e.target.value })}
+              autoComplete="off" />
+            <button type="button" className={`measurement-editor-global-search${globalSearch ? ' is-active' : ''}`}
+              aria-pressed={globalSearch}
+              title={globalSearch ? 'Global search enabled: search all categories' : 'Search only the current category'}
+              onClick={() => dispatch({ type: 'TOGGLE_GLOBAL_SEARCH' })}>
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="8" cy="8" r="6" />
+                <path d="M2 8h12M8 2c2 2 2 10 0 12M8 2C6 4 6 12 8 14" />
+              </svg>
+            </button>
+          </label>
+          {searchSnapshot && (
+            <button type="button" className="measurement-editor-restore-search"
+              title={`Restore search: ${searchSnapshot.query}`}
+              onClick={() => dispatch({ type: 'RESTORE_SEARCH' })}>
+              <span aria-hidden="true">↩</span>
+              Search
+            </button>
+          )}
+          <button type="button" onClick={() => dispatch({ type: 'ADD_MEASUREMENT' })}>
+            <span aria-hidden="true">+</span> Add
+          </button>
+          <button type="button" disabled={!measurement}
+            onClick={() => measurement && dispatch({ type: 'DUPLICATE_MEASUREMENT', name: measurement.name })}>
+            <svg className="measurement-editor-action-icon" viewBox="0 0 16 16" aria-hidden="true">
+              <rect x="5.5" y="5.5" width="8" height="8" rx="1" />
+              <path d="M3.5 10.5h-1a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v1" />
+            </svg>
+            Duplicate
+          </button>
+          <button type="button" className="is-danger" disabled={!canRemove}
+            title={measurement && !canRemove ? 'Pre-defined measurements cannot be removed' : undefined}
+            onClick={() => {
+              if (!measurement || !canRemove) return;
+              if (!window.confirm(`Remove ${measurement.name}? Formulas that use it may stop resolving.`)) return;
+              dispatch({ type: 'REMOVE_MEASUREMENT', name: measurement.name });
+            }}>
+            <span aria-hidden="true">-</span> Remove
+          </button>
+        </div>
+      )}
       {doc && measurement ? (
         <MeasurementEditor measurement={measurement} measurements={doc.measurements}
           unit={doc.unit} dependents={dependents}
           nameExists={name => Boolean(doc.measurements[name])}
-          onApply={(oldName, newName, value) => {
-            dispatch({ type: 'APPLY_EDIT', oldName, newName, value });
+          onApply={(oldName, newName, value, description) => {
+            dispatch({ type: 'APPLY_EDIT', oldName, newName, value, description });
           }}
           onSelectVariable={name => dispatch({ type: 'SELECT_MEASUREMENT', name })} />
       ) : (

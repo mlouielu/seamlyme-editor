@@ -5,32 +5,50 @@ import { useAppState, useDispatch } from '../store';
 
 function fmtVal(v: number | null | undefined): string {
   if (v == null) return 'Not set';
-  return (v % 1 === 0) ? String(v) : v.toFixed(4).replace(/\.?0+$/, '');
+  return v.toFixed(2);
 }
 
 function toCm(val: number, unit: string): string | null {
   let cm: number | null = null;
   if (unit === 'inch' || unit === 'in') cm = val * 2.54;
   else if (unit === 'mm') cm = val / 10;
-  return cm !== null ? cm.toFixed(1).replace(/\.0$/, '') : null;
+  return cm !== null ? cm.toFixed(2) : null;
 }
 
-function calculatedText(m: SeamlyMeasurement, unit: string): string {
-  if (!m.hasValue) return 'Not set';
-  if (m.error) return 'Formula error';
-  const cm = m.resolved != null ? toCm(m.resolved, unit) : null;
-  return `= ${fmtVal(m.resolved)} ${unit}${cm ? ` (${cm} cm)` : ''}`;
+function CalculatedValue({ measurement, unit }: { measurement: SeamlyMeasurement; unit: string }) {
+  if (!measurement.hasValue) return <>Not set</>;
+  if (measurement.error) return <>{measurement.error}</>;
+
+  const cm = measurement.resolved != null ? toCm(measurement.resolved, unit) : null;
+  return (
+    <>
+      <span className="measurement-list-calculated-line">
+        <span className="measurement-list-calculated-prefix">=</span>
+        <span className="measurement-list-calculated-number">{fmtVal(measurement.resolved)}</span>
+        <span>{unit}</span>
+      </span>
+      {cm && (
+        <span className="measurement-list-calculated-line is-secondary">
+          <span className="measurement-list-calculated-prefix" />
+          <span className="measurement-list-calculated-number">{cm}</span>
+          <span>cm</span>
+        </span>
+      )}
+    </>
+  );
 }
 
 function EditorPanel() {
   const state = useAppState();
   const dispatch = useDispatch();
-  const { doc, activeCategory, searchQuery, valueFilter, highlighted, selected: selectedName } = state;
-  const selectedRowRef = useRef<HTMLButtonElement>(null);
+  const { doc, activeCategory, searchQuery, globalSearch, valueFilter, highlighted, selected: selectedName } = state;
+  const selectedRowRef = useRef<HTMLDivElement>(null);
 
   const allRows: SeamlyMeasurement[] = doc
     ? Object.values(doc.measurements).filter(m => {
+        if (globalSearch && searchQuery) return true;
         const cat = idToCategory(m.id);
+        if (activeCategory === 'errors') return Boolean(m.error);
         if (activeCategory === 'custom') return !cat;
         if (activeCategory !== 'all') return cat === activeCategory;
         return true;
@@ -79,19 +97,35 @@ function EditorPanel() {
       <div className="measurement-list" role="list">
         {filteredRows.length === 0 && <div className="empty-cell">No measurements match your filters.</div>}
         {filteredRows.map(m => (
-          <button key={m.name} type="button" role="listitem"
+          <div key={m.name} role="listitem"
             ref={selectedName === m.name ? selectedRowRef : null}
-            className={`measurement-list-row${selectedName === m.name ? ' is-selected' : ''}${highlighted === m.name ? ' is-highlighted' : ''}${!m.hasValue ? ' is-missing' : ''}`}
-            onClick={() => dispatch({ type: 'SELECT_MEASUREMENT', name: m.name })}>
-            <code className="badge-id">{m.id || '-'}</code>
-            <span className="measurement-list-name">
-              <strong>{m.fullName || m.name}</strong>
-              <code>{m.name}</code>
-            </span>
-            <span className={`measurement-list-calculated${m.error ? ' is-error' : ''}`}>
-              {calculatedText(m, doc.unit)}
-            </span>
-          </button>
+            className={`measurement-list-row${selectedName === m.name ? ' is-selected' : ''}${highlighted === m.name ? ' is-highlighted' : ''}${!m.hasValue ? ' is-missing' : ''}${m.error ? ' has-error' : ''}`}
+          >
+            <button type="button" className="measurement-list-select"
+              onClick={() => dispatch({
+                type: searchQuery ? 'SELECT_SEARCH_RESULT' : 'SELECT_MEASUREMENT',
+                name: m.name,
+              })}>
+              <code className="badge-id">{m.id || '-'}</code>
+              <span className="measurement-list-name">
+                <strong>{m.fullName || m.name}</strong>
+                <code>{m.name}</code>
+              </span>
+              <span className={`measurement-list-calculated${m.error ? ' is-error' : ''}`}
+                title={m.error ?? undefined}>
+                <CalculatedValue measurement={m} unit={doc.unit} />
+              </span>
+            </button>
+            {searchQuery && (
+              <button type="button" className="measurement-list-jump"
+                title={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
+                aria-label={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
+                onClick={() => dispatch({ type: 'JUMP_FROM_SEARCH', name: m.name })}>
+                <span aria-hidden="true">↗</span>
+                {idToCategory(m.id) ?? '*'}
+              </button>
+            )}
+          </div>
         ))}
       </div>
     </div>
