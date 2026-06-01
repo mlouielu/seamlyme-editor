@@ -92,20 +92,18 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
           </svg>
         </button>
         <nav ref={selectorRef} className={`category-selector category-selector-${placement}`} aria-label="Measurement category">
-          {availableCategories.map(letter => (
-            <button key={letter} className={`cat-tab${activeCategory === letter ? ' is-active' : ''}`}
-              title={CATEGORY_LABELS[letter]}
-              onClick={() => dispatch({ type: 'SET_CATEGORY', category: letter })}>
-              {activeCategory === letter ? (
-                <>
-                  <span className="cat-tab-chip">{activeLabel(letter).chip}</span>
-                  <span className="cat-tab-name">{activeLabel(letter).name}</span>
-                </>
-              ) : (
-                <span className="cat-tab-letter">{letter}</span>
-              )}
-            </button>
-          ))}
+          <button className={`cat-tab${activeCategory === 'all' ? ' is-active' : ''}`}
+            title="All measurements"
+            onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'all' })}>
+            {activeCategory === 'all' ? (
+              <>
+                <span className="cat-tab-chip">{activeLabel('all').chip}</span>
+                <span className="cat-tab-name">{activeLabel('all').name}</span>
+              </>
+            ) : (
+              <span className="cat-tab-letter">All</span>
+            )}
+          </button>
           {hasCustom && (
             <button className={`cat-tab${activeCategory === 'custom' ? ' is-active' : ''}`}
               title="Custom measurements"
@@ -120,18 +118,20 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
               )}
             </button>
           )}
-          <button className={`cat-tab${activeCategory === 'all' ? ' is-active' : ''}`}
-            title="All measurements"
-            onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'all' })}>
-            {activeCategory === 'all' ? (
-              <>
-                <span className="cat-tab-chip">{activeLabel('all').chip}</span>
-                <span className="cat-tab-name">{activeLabel('all').name}</span>
-              </>
-            ) : (
-              <span className="cat-tab-letter">All</span>
-            )}
-          </button>
+          {availableCategories.map(letter => (
+            <button key={letter} className={`cat-tab${activeCategory === letter ? ' is-active' : ''}`}
+              title={CATEGORY_LABELS[letter]}
+              onClick={() => dispatch({ type: 'SET_CATEGORY', category: letter })}>
+              {activeCategory === letter ? (
+                <>
+                  <span className="cat-tab-chip">{activeLabel(letter).chip}</span>
+                  <span className="cat-tab-name">{activeLabel(letter).name}</span>
+                </>
+              ) : (
+                <span className="cat-tab-letter">{letter}</span>
+              )}
+            </button>
+          ))}
         </nav>
         <button type="button"
           className={`category-scroll-button is-right${canScrollRight ? ' is-visible' : ''}`}
