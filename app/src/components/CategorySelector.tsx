@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { CATEGORY_LABELS, CATEGORY_LETTERS, idToCategory } from '../catalog';
+import { RECOMMENDED_FIGURE_MEASUREMENTS } from '../recommended';
 import { useAppState, useDispatch } from '../store';
 
 interface CategorySelectorProps {
@@ -50,6 +51,11 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
     measurements.some(measurement => idToCategory(measurement.id) === letter)
   );
   const errorCount = measurements.filter(measurement => measurement.error).length;
+  const recommended = RECOMMENDED_FIGURE_MEASUREMENTS
+    .map(name => doc.measurements[name])
+    .filter(Boolean);
+  const recommendedComplete = recommended.filter(measurement => (measurement.resolved ?? 0) > 0).length;
+  const showRecommended = recommended.length > 0;
   const hasCustom = measurements.some(measurement => !idToCategory(measurement.id));
 
   function labelParts(category: string): { letter: string; name: string } {
@@ -62,6 +68,7 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
   }
 
   function activeLabel(category: string): { chip: string; name: string } {
+    if (category === 'recommended') return { chip: '✓', name: `${recommendedComplete}/${recommended.length} start` };
     if (category === 'errors') return { chip: '!', name: `${errorCount} errors` };
     if (category === 'custom') return { chip: '*', name: 'Custom' };
     if (category === 'all') return { chip: 'All', name: 'Measurements' };
@@ -92,6 +99,20 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
           </svg>
         </button>
         <nav ref={selectorRef} className={`category-selector category-selector-${placement}`} aria-label="Measurement category">
+          {showRecommended && (
+            <button className={`cat-tab cat-tab-recommended${activeCategory === 'recommended' ? ' is-active' : ''}`}
+              title="Recommended measurements to fill in first"
+              onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'recommended' })}>
+              {activeCategory === 'recommended' ? (
+                <>
+                  <span className="cat-tab-chip">{activeLabel('recommended').chip}</span>
+                  <span className="cat-tab-name">{activeLabel('recommended').name}</span>
+                </>
+              ) : (
+                <span className="cat-tab-letter">Start {recommendedComplete}/{recommended.length}</span>
+              )}
+            </button>
+          )}
           <button className={`cat-tab${activeCategory === 'all' ? ' is-active' : ''}`}
             title="All measurements"
             onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'all' })}>

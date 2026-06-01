@@ -15,6 +15,8 @@ interface DepInfo {
   name: string;
   wVar: string | null;
   hVar: string | null;
+  hCalc: string | null;
+  hDeps: string[];
   wVal: string;
   hVal: string;
   unit: string;
@@ -86,12 +88,31 @@ function FigurePanel({ doc, highlighted, skinColor, projectionRatioEnabled }: Fi
 
       const unit = doc.unit;
       const R = Object.fromEntries(Object.entries(doc.measurements).map(([k,m]) => [k, m.resolved ?? 0]));
+      const hVar = d.hVar && R[d.hVar] > 0
+        ? d.hVar
+        : d.hFB && R[d.hFB] > 0
+          ? d.hFB
+          : null;
+      let computedHeight: number | null = null;
+      if (!hVar && d.hFn) {
+        try {
+          computedHeight = d.hFn(R);
+        } catch {
+          computedHeight = null;
+        }
+      }
       setDepInfo({
         name: d.name,
         wVar: d.wVar ?? null,
-        hVar: d.hVar ?? null,
+        hVar,
+        hCalc: !hVar && d.hFn ? d.hCalc ?? 'computed' : null,
+        hDeps: !hVar && d.hFn ? d.hDeps ?? [] : [],
         wVal: d.wVar ? (R[d.wVar] > 0 ? `${R[d.wVar].toFixed(2)} ${unit}` : '—') : '—',
-        hVal: d.hVar ? (R[d.hVar] > 0 ? `${R[d.hVar].toFixed(2)} ${unit}` : '—') : '—',
+        hVal: hVar
+          ? `${R[hVar].toFixed(2)} ${unit}`
+          : computedHeight && computedHeight > 0
+            ? `${computedHeight.toFixed(2)} ${unit}`
+            : '—',
         unit,
       });
       const pvar = primaryVar(d);
@@ -193,6 +214,32 @@ function FigurePanel({ doc, highlighted, skinColor, projectionRatioEnabled }: Fi
                     }}>↑ jump</button>
                   </td>
                 </tr>
+              )}
+              {depInfo.hCalc && (
+                <>
+                  <tr>
+                    <td className="dep-role">Height</td>
+                    <td><code>{depInfo.hCalc}</code></td>
+                    <td className="dep-val">{depInfo.hVal}</td>
+                    <td />
+                  </tr>
+                  {depInfo.hDeps.map(name => (
+                    <tr key={name}>
+                      <td className="dep-role muted">uses</td>
+                      <td><code>{name}</code></td>
+                      <td className="dep-val">
+                        {doc?.measurements[name]?.resolved != null
+                          ? `${doc.measurements[name].resolved!.toFixed(2)} ${depInfo.unit}`
+                          : '—'}
+                      </td>
+                      <td>
+                        <button className="dep-jump" onClick={() => {
+                          dispatch({ type: 'SET_HIGHLIGHT', name });
+                        }}>↑ jump</button>
+                      </td>
+                    </tr>
+                  ))}
+                </>
               )}
               {depInfo.wVar && doc?.measurements[depInfo.wVar]?.dependencies?.length ? (
                 <tr>

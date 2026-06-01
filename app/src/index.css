@@ -128,6 +128,15 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   white-space: nowrap; font-family: inherit; transition: background .15s, color .15s, transform .15s, box-shadow .15s, padding .15s, max-width .15s;
 }
 .cat-tab:hover { background: var(--surface); color: var(--text); }
+.cat-tab-recommended {
+  border-color: #bbf7d0; background: #f0fdf4; color: #15803d;
+}
+.cat-tab-recommended:hover { background: #dcfce7; color: #166534; }
+.cat-tab-recommended .cat-tab-chip { background: #16a34a; }
+.cat-tab-recommended.is-active {
+  border-color: #16a34a; background: #f0fdf4; color: #166534;
+  box-shadow: 0 6px 16px rgba(22, 163, 74, .12);
+}
 .cat-tab-errors {
   flex-shrink: 0; margin-left: 5px; padding: 0 8px 0 4px;
   border-color: #fecaca; background: #fef2f2; color: #b91c1c;

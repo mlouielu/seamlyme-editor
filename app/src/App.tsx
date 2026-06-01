@@ -125,7 +125,7 @@ function Header() {
 // ── Layout ────────────────────────────────────────────────────────────────────
 
 function Layout() {
-  const { doc, activeCategory, highlighted, selected, skinColor, projectionRatioEnabled } = useAppState();
+  const { doc, activeCategory, fileName, highlighted, selected, skinColor, projectionRatioEnabled } = useAppState();
   const debugParams = new URLSearchParams(window.location.search);
   const [showDiagram, setShowDiagram] = useState(
     import.meta.env.DEV ? debugParams.get('diagram') !== '0' : true,
@@ -134,8 +134,8 @@ function Layout() {
     import.meta.env.DEV ? debugParams.get('figure') !== '0' : true,
   );
   const missingVariables = useMemo(() => Object.values(doc?.measurements ?? {})
-    .filter(measurement => !measurement.hasValue)
-    .map(measurement => measurement.name), [doc]);
+    .filter(measurement => !measurement.hasValue || (fileName === 'new' && measurement.raw === '0'))
+    .map(measurement => measurement.name), [doc, fileName]);
 
   if (!doc) return (
     <>
@@ -174,7 +174,6 @@ function Layout() {
           </span>
         </div>
       )}
-      <CategorySelector placement="desktop" />
       <div className="workspace-split">
         <div className="workspace-left">
           {showDiagram && (
@@ -185,6 +184,7 @@ function Layout() {
               </Profiler>
             </div>
           )}
+          <CategorySelector placement="desktop" />
           <CategorySelector placement="mobile" />
           <Profiler id="EditorPanel" onRender={logProfile}>
             <EditorPanel />

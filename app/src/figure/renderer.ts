@@ -32,6 +32,7 @@ interface FigMeasurement {
   hFB?: string;
   hFn?: (r: R) => number | null;
   hCalc?: string;
+  hDeps?: string[];
   widthVar?: string;
 }
 
@@ -50,25 +51,31 @@ export const FIGURE_MEASUREMENTS: FigMeasurement[] = [
   { name: 'Neck width',   wVar: 'neck_width',      wScale: _HW_ARC, hVar: 'height_neck_front', hFB: 'height_neck_side' },
   { name: 'Neck side',    wVar: 'neck_width',      wScale: _HW_ARC,
     hFn: r => offsetUp(r.height_waist_front, r.neck_side_to_waist_f) ?? offsetUp(r.height_waist_front, r.neck_side_to_waist_side_f) ?? r.height_neck_side,
-    hCalc: 'height_waist_front + neck_side_to_waist_f' },
+    hCalc: 'height_waist_front + neck_side_to_waist_f',
+    hDeps: ['height_waist_front', 'neck_side_to_waist_f', 'neck_side_to_waist_side_f', 'height_neck_side'] },
   { name: 'Shoulder tip', wVar: 'shoulder_tip_to_shoulder_tip_f', wScale: _HW_ARC, widthVar: 'width_shoulder',
-    hFn: r => shoulderTipHeight(r), hCalc: 'height_neck_front - Δy(neck_front_to_shoulder_tip_f)' },
+    hFn: r => shoulderTipHeight(r), hCalc: 'height_neck_front - Δy(neck_front_to_shoulder_tip_f)',
+    hDeps: ['height_neck_front', 'neck_width', 'neck_front_to_shoulder_tip_f', 'height_shoulder_tip'] },
   { name: 'Highbust',     wVar: 'highbust_arc_f',  wScale: _HW_ARC,
     hFn: r => offsetDown(r.height_neck_front, r.neck_front_to_highbust_f) ?? lerp(r.height_armpit, r.height_bustpoint, 0.5),
-    hCalc: 'height_neck_front - neck_front_to_highbust_f' },
+    hCalc: 'height_neck_front - neck_front_to_highbust_f',
+    hDeps: ['height_neck_front', 'neck_front_to_highbust_f', 'height_armpit', 'height_bustpoint'] },
   { name: 'Bust',         wVar: 'bust_arc_f',      wScale: _HW_ARC, hVar: 'height_bustpoint' },
   { name: 'Lowbust',      wVar: 'lowbust_arc_f',   wScale: _HW_ARC,
     hFn: r => offsetUp(r.height_waist_front, r.lowbust_to_waist_f) ?? lerp(r.height_bustpoint, r.height_waist_side, 0.35),
-    hCalc: 'height_waist_front + lowbust_to_waist_f' },
+    hCalc: 'height_waist_front + lowbust_to_waist_f',
+    hDeps: ['height_waist_front', 'lowbust_to_waist_f', 'height_bustpoint', 'height_waist_side'] },
   { name: 'Rib',          wVar: 'rib_arc_f',       wScale: _HW_ARC,
-    hFn: r => lerp(r.height_bustpoint, r.height_waist_side, 0.68), hCalc: 'lerp(height_bustpoint, height_waist_side, 0.68)' },
+    hFn: r => lerp(r.height_bustpoint, r.height_waist_side, 0.68), hCalc: 'lerp(height_bustpoint, height_waist_side, 0.68)',
+    hDeps: ['height_bustpoint', 'height_waist_side'] },
   { name: 'Waist',        wVar: 'waist_arc_f',     wScale: _HW_ARC, hVar: 'height_waist_side', hFB: 'height_waist_front' },
   { name: 'Highhip',      wVar: 'highhip_arc_f',   wScale: _HW_ARC, hVar: 'height_highhip' },
   { name: 'Hip',          wVar: 'hip_arc_f',       wScale: _HW_ARC, hVar: 'height_hip' },
   { name: 'Crotch',       wVar: null,                              hVar: 'leg_crotch_to_floor' },
   { name: 'Thigh upper',  wVar: 'leg_thigh_upper_circ', wScale: _HW_CIRC, hVar: 'height_gluteal_fold' },
   { name: 'Thigh mid',    wVar: 'leg_thigh_mid_circ',   wScale: _HW_CIRC,
-    hFn: r => lerp(r.height_gluteal_fold, r.height_knee, 0.5), hCalc: 'lerp(height_gluteal_fold, height_knee, 0.5)' },
+    hFn: r => lerp(r.height_gluteal_fold, r.height_knee, 0.5), hCalc: 'lerp(height_gluteal_fold, height_knee, 0.5)',
+    hDeps: ['height_gluteal_fold', 'height_knee'] },
   { name: 'Knee',         wVar: 'leg_knee_circ',   wScale: _HW_CIRC, hVar: 'height_knee' },
   { name: 'Calf',         wVar: 'leg_calf_circ',   wScale: _HW_CIRC, hVar: 'height_calf' },
   { name: 'Ankle high',   wVar: 'leg_ankle_high_circ', wScale: _HW_CIRC, hVar: 'height_ankle_high' },

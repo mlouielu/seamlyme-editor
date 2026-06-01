@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef } from 'react';
 import type { SeamlyMeasurement } from '@seamlyme/core';
 import { idToCategory } from '../catalog';
+import { RECOMMENDED_FIGURE_MEASUREMENTS } from '../recommended';
 import { useAppState, useDispatch } from '../store';
 
 function fmtVal(v: number | null | undefined): string {
@@ -15,8 +16,14 @@ function toCm(val: number, unit: string): string | null {
   return cm !== null ? cm.toFixed(2) : null;
 }
 
-function CalculatedValue({ measurement, unit }: { measurement: SeamlyMeasurement; unit: string }) {
-  if (!measurement.hasValue) return <>Not set</>;
+function CalculatedValue({
+  measurement, unit, placeholderZero,
+}: {
+  measurement: SeamlyMeasurement;
+  unit: string;
+  placeholderZero: boolean;
+}) {
+  if (!measurement.hasValue || (placeholderZero && measurement.raw === '0')) return <>Not set</>;
   if (measurement.error) return <>{measurement.error}</>;
 
   const cm = measurement.resolved != null ? toCm(measurement.resolved, unit) : null;
@@ -41,18 +48,28 @@ function CalculatedValue({ measurement, unit }: { measurement: SeamlyMeasurement
 function EditorPanel() {
   const state = useAppState();
   const dispatch = useDispatch();
-  const { doc, activeCategory, searchQuery, globalSearch, valueFilter, highlighted, selected: selectedName } = state;
+  const { doc, activeCategory, fileName, searchQuery, globalSearch, valueFilter, highlighted, selected: selectedName } = state;
   const selectedRowRef = useRef<HTMLDivElement>(null);
 
   const allRows: SeamlyMeasurement[] = doc
     ? Object.values(doc.measurements).filter(m => {
         if (globalSearch && searchQuery) return true;
         const cat = idToCategory(m.id);
+        if (activeCategory === 'recommended') return RECOMMENDED_FIGURE_MEASUREMENTS.includes(
+          m.name as typeof RECOMMENDED_FIGURE_MEASUREMENTS[number],
+        );
         if (activeCategory === 'errors') return Boolean(m.error);
         if (activeCategory === 'custom') return !cat;
         if (activeCategory !== 'all') return cat === activeCategory;
         return true;
       }).sort((a, b) => {
+        if (activeCategory === 'recommended') {
+          return RECOMMENDED_FIGURE_MEASUREMENTS.indexOf(
+            a.name as typeof RECOMMENDED_FIGURE_MEASUREMENTS[number],
+          ) - RECOMMENDED_FIGURE_MEASUREMENTS.indexOf(
+            b.name as typeof RECOMMENDED_FIGURE_MEASUREMENTS[number],
+          );
+        }
         if (a.id && b.id) return a.id.localeCompare(b.id);
         if (a.id) return -1; if (b.id) return 1;
         return a.name.localeCompare(b.name);
@@ -96,10 +113,12 @@ function EditorPanel() {
 
       <div className="measurement-list" role="list">
         {filteredRows.length === 0 && <div className="empty-cell">No measurements match your filters.</div>}
-        {filteredRows.map(m => (
+        {filteredRows.map(m => {
+          const missing = !m.hasValue || (fileName === 'new' && m.raw === '0');
+          return (
           <div key={m.name} role="listitem"
             ref={selectedName === m.name ? selectedRowRef : null}
-            className={`measurement-list-row${selectedName === m.name ? ' is-selected' : ''}${highlighted === m.name ? ' is-highlighted' : ''}${!m.hasValue ? ' is-missing' : ''}${m.error ? ' has-error' : ''}`}
+            className={`measurement-list-row${selectedName === m.name ? ' is-selected' : ''}${highlighted === m.name ? ' is-highlighted' : ''}${missing ? ' is-missing' : ''}${m.error ? ' has-error' : ''}`}
           >
             <button type="button" className="measurement-list-select"
               onClick={() => dispatch({
@@ -113,7 +132,7 @@ function EditorPanel() {
               </span>
               <span className={`measurement-list-calculated${m.error ? ' is-error' : ''}`}
                 title={m.error ?? undefined}>
-                <CalculatedValue measurement={m} unit={doc.unit} />
+                <CalculatedValue measurement={m} unit={doc.unit} placeholderZero={fileName === 'new'} />
               </span>
             </button>
             {searchQuery && (
@@ -126,7 +145,8 @@ function EditorPanel() {
               </button>
             )}
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

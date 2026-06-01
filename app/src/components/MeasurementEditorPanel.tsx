@@ -27,6 +27,7 @@ interface MeasurementEditorProps {
   measurements: Record<string, SeamlyMeasurement>;
   unit: string;
   dependents: string[];
+  placeholderZero: boolean;
   nameExists: (name: string) => boolean;
   onApply: (oldName: string, newName: string, value: string, description: string) => void;
   onSelectVariable: (name: string) => void;
@@ -94,10 +95,12 @@ function DependencyTree({ names, measurements, onSelect }: DependencyTreeProps) 
 }
 
 function MeasurementEditor({
-  measurement, measurements, unit, dependents, nameExists, onApply, onSelectVariable,
+  measurement, measurements, unit, dependents, placeholderZero, nameExists, onApply, onSelectVariable,
 }: MeasurementEditorProps) {
+  const showZeroPlaceholder = placeholderZero && measurement.raw === '0';
   const [variable, setVariable] = useState(measurement.name);
-  const [value, setValue] = useState(measurement.raw);
+  const [value, setValue] = useState(showZeroPlaceholder ? '' : measurement.raw);
+  const [valueEdited, setValueEdited] = useState(false);
   const [description, setDescription] = useState(measurement.desc);
   const [dependenciesExpanded, setDependenciesExpanded] = useState(false);
   const [error, setError] = useState('');
@@ -106,10 +109,11 @@ function MeasurementEditor({
 
   useEffect(() => {
     setVariable(measurement.name);
-    setValue(measurement.raw);
+    setValue(showZeroPlaceholder ? '' : measurement.raw);
+    setValueEdited(false);
     setDescription(measurement.desc);
     setError('');
-  }, [measurement.desc, measurement.name, measurement.raw]);
+  }, [measurement.desc, measurement.name, measurement.raw, showZeroPlaceholder]);
 
   function validate(): string | null {
     const nextVariable = variable.trim();
@@ -131,12 +135,13 @@ function MeasurementEditor({
     }
     setError('');
     const nextVariable = variable.trim();
+    const nextValue = showZeroPlaceholder && !valueEdited ? measurement.raw : value;
     if (
       nextVariable === measurement.name
-      && value === measurement.raw
+      && nextValue === measurement.raw
       && description === measurement.desc
     ) return;
-    onApply(measurement.name, nextVariable, value, description);
+    onApply(measurement.name, nextVariable, nextValue, description);
   }
 
   useEffect(() => {
@@ -147,9 +152,10 @@ function MeasurementEditor({
     }
     setError('');
     const nextVariable = variable.trim();
+    const nextValue = showZeroPlaceholder && !valueEdited ? measurement.raw : value;
     if (
       nextVariable === measurement.name
-      && value === measurement.raw
+      && nextValue === measurement.raw
       && description === measurement.desc
     ) return;
     timerRef.current = window.setTimeout(applyImmediately, 400);
@@ -158,7 +164,7 @@ function MeasurementEditor({
     };
   // `validate` and `applyImmediately` intentionally read the current render.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [description, measurement.desc, measurement.name, measurement.raw, nameExists, onApply, value, variable]);
+  }, [description, measurement.desc, measurement.name, measurement.raw, nameExists, onApply, showZeroPlaceholder, value, valueEdited, variable]);
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key !== 'Enter') return;
@@ -188,7 +194,11 @@ function MeasurementEditor({
       <div className="measurement-editor-row calculation-row">
         <label className="formula-field">
           <span>Formula or value</span>
-          <input value={value} onChange={e => setValue(e.target.value)}
+          <input value={value} placeholder={showZeroPlaceholder ? '0' : undefined}
+            onChange={e => {
+              setValueEdited(true);
+              setValue(e.target.value);
+            }}
             onKeyDown={onKeyDown} spellCheck={false} />
         </label>
         <span className="calculation-arrow" aria-hidden="true">-&gt;</span>
@@ -234,7 +244,7 @@ function MeasurementEditor({
 }
 
 function MeasurementEditorPanel() {
-  const { doc, globalSearch, searchQuery, searchSnapshot, selected } = useAppState();
+  const { doc, fileName, globalSearch, searchQuery, searchSnapshot, selected } = useAppState();
   const dispatch = useDispatch();
   const measurement = doc && selected ? doc.measurements[selected] : null;
   const canRemove = measurement ? !idToCategory(measurement.id) : false;
@@ -299,7 +309,7 @@ function MeasurementEditorPanel() {
       )}
       {doc && measurement ? (
         <MeasurementEditor measurement={measurement} measurements={doc.measurements}
-          unit={doc.unit} dependents={dependents}
+          unit={doc.unit} dependents={dependents} placeholderZero={fileName === 'new'}
           nameExists={name => Boolean(doc.measurements[name])}
           onApply={(oldName, newName, value, description) => {
             dispatch({ type: 'APPLY_EDIT', oldName, newName, value, description });

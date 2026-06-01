@@ -31,7 +31,7 @@ export interface AppState {
   /** Raw XML at load time — used to compute "modified" badges. */
   originalRaws: Record<string, string>;
   fileName: string;
-  activeCategory: string;   // letter 'A'-'Q', 'custom', 'errors', or 'all'
+  activeCategory: string;   // letter 'A'-'Q', 'custom', 'errors', 'recommended', or 'all'
   /** Variable name selected for editing in the bottom panel. */
   selected: string | null;
   /** Variable name of the currently highlighted measurement, or null. */
@@ -226,9 +226,11 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SELECT_MEASUREMENT': {
       if (!state.doc?.measurements[action.name]) return state;
       const measurement = state.doc.measurements[action.name];
-      const category = state.activeCategory === 'errors' && measurement.error
-        ? 'errors'
-        : measurement.id.match(/^([A-Q])\d+$/)?.[1] ?? 'custom';
+      const category = state.activeCategory === 'recommended'
+        ? 'recommended'
+        : state.activeCategory === 'errors' && measurement.error
+          ? 'errors'
+          : measurement.id.match(/^([A-Q])\d+$/)?.[1] ?? 'custom';
       if (
         state.selected === action.name
         && state.highlighted === action.name
