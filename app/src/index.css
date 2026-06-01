@@ -164,7 +164,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .cat-tab-label { display: none; }
 
 .editor-toolbar {
-  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  display: none; align-items: center; gap: 8px; padding: 8px 12px;
   border-bottom: 1px solid var(--border); flex-shrink: 0; background: var(--surface);
 }
 .search-wrap { position: relative; flex: 1; }
