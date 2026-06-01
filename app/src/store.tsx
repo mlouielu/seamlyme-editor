@@ -2,13 +2,13 @@ import {
   createContext,
   useContext,
   useReducer,
-  useCallback,
   type ReactNode,
   type Dispatch,
 } from 'react';
 import {
   type SeamlyDocument,
   cloneDocument,
+  renameMeasurement,
   setMeasurementValue,
 } from '@seamlyme/core';
 
@@ -22,6 +22,8 @@ export interface AppState {
   originalRaws: Record<string, string>;
   fileName: string;
   activeCategory: string;   // letter 'A'-'Q', 'custom', or 'all'
+  /** Variable name selected for editing in the bottom panel. */
+  selected: string | null;
   /** Variable name of the currently highlighted measurement, or null. */
   highlighted: string | null;
   searchQuery: string;
@@ -35,6 +37,7 @@ const initial: AppState = {
   originalRaws: {},
   fileName: '',
   activeCategory: 'A',
+  selected: null,
   highlighted: null,
   searchQuery: '',
   valueFilter: 'all',
@@ -46,8 +49,9 @@ const initial: AppState = {
 
 export type Action =
   | { type: 'LOAD'; doc: SeamlyDocument; fileName: string }
-  | { type: 'SET_VALUE'; name: string; value: string }
+  | { type: 'APPLY_EDIT'; oldName: string; newName: string; value: string }
   | { type: 'SET_CATEGORY'; category: string }
+  | { type: 'SELECT_MEASUREMENT'; name: string }
   | { type: 'SET_HIGHLIGHT'; name: string | null }
   | { type: 'SET_SEARCH'; query: string }
   | { type: 'SET_VALUE_FILTER'; filter: ValueFilter }
@@ -69,25 +73,56 @@ function reducer(state: AppState, action: Action): AppState {
         originalRaws: raws,
         fileName: action.fileName,
         activeCategory: 'A',
+        selected: null,
         highlighted: null,
         searchQuery: '',
         valueFilter: 'all',
       };
     }
 
-    case 'SET_VALUE': {
+    case 'APPLY_EDIT': {
       if (!state.doc) return state;
       const next = cloneDocument(state.doc);
       try {
-        setMeasurementValue(next, action.name, action.value);
+        if (action.newName !== action.oldName) {
+          renameMeasurement(next, action.oldName, action.newName);
+        }
+        setMeasurementValue(next, action.newName, action.value);
       } catch {
         return state;
       }
-      return { ...state, doc: next };
+      return {
+        ...state,
+        doc: next,
+        highlighted: state.highlighted === action.oldName
+          ? action.newName
+          : state.highlighted,
+        selected: state.selected === action.oldName
+          ? action.newName
+          : state.selected,
+      };
     }
 
     case 'SET_CATEGORY':
       return { ...state, activeCategory: action.category, searchQuery: '', highlighted: null };
+
+    case 'SELECT_MEASUREMENT': {
+      if (!state.doc?.measurements[action.name]) return state;
+      const id = state.doc.measurements[action.name].id;
+      const category = id.match(/^([A-Q])\d+$/)?.[1] ?? 'custom';
+      if (
+        state.selected === action.name
+        && state.highlighted === action.name
+        && state.activeCategory === category
+      ) return state;
+      return {
+        ...state,
+        activeCategory: category,
+        searchQuery: '',
+        selected: action.name,
+        highlighted: action.name,
+      };
+    }
 
     case 'SET_HIGHLIGHT':
       return state.highlighted === action.name
@@ -130,12 +165,3 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
 export function useAppState() { return useContext(StateCtx); }
 export function useDispatch() { return useContext(DispatchCtx); }
-
-/** Stable setValue callback to pass down to table cells. */
-export function useSetValue() {
-  const dispatch = useDispatch();
-  return useCallback(
-    (name: string, value: string) => dispatch({ type: 'SET_VALUE', name, value }),
-    [dispatch],
-  );
-}

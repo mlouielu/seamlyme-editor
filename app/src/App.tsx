@@ -1,9 +1,13 @@
-import { Profiler, useCallback, useState, type ProfilerOnRenderCallback } from 'react';
+import { Profiler, useCallback, useMemo, useState, type ProfilerOnRenderCallback } from 'react';
 import { parseSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
 import EditorPanel   from './components/EditorPanel';
 import DiagramPanel  from './components/DiagramPanel';
 import FigurePanel   from './components/FigurePanel';
+import MeasurementEditorPanel from './components/MeasurementEditorPanel';
+import CategorySelector from './components/CategorySelector';
+
+const EMPTY_SMIS = '<smis><version>0.3.3</version><unit>cm</unit><read-only>false</read-only><notes/><pm_system/><personal/><body-measurements/></smis>';
 
 const logProfile: ProfilerOnRenderCallback = (
   id,
@@ -15,6 +19,11 @@ const logProfile: ProfilerOnRenderCallback = (
     `[profile] ${id} ${phase}: actual=${actualDuration.toFixed(1)}ms base=${baseDuration.toFixed(1)}ms`,
   );
 };
+
+function loadNewSheet(dispatch: ReturnType<typeof useDispatch>) {
+  dispatch({ type: 'LOAD', doc: parseSmis(EMPTY_SMIS), fileName: 'new' });
+  document.title = 'new - SeamlyME';
+}
 
 // ── Drop zone (shown before a file is loaded) ─────────────────────────────────
 
@@ -59,6 +68,7 @@ function DropZone() {
           Browse file…
           <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
         </label>
+        <button className="btn" onClick={() => loadNewSheet(dispatch)}>New</button>
       </div>
     </div>
   );
@@ -109,6 +119,7 @@ function Header() {
         {doc ? 'Load another…' : 'Load .smis…'}
         <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
       </label>
+      {doc && <button className="btn" onClick={() => loadNewSheet(dispatch)}>New</button>}
     </header>
   );
 }
@@ -116,14 +127,17 @@ function Header() {
 // ── Layout ────────────────────────────────────────────────────────────────────
 
 function Layout() {
-  const { doc, highlighted, skinColor, projectionRatioEnabled } = useAppState();
+  const { doc, activeCategory, highlighted, selected, skinColor, projectionRatioEnabled } = useAppState();
   const debugParams = new URLSearchParams(window.location.search);
   const [showDiagram, setShowDiagram] = useState(
-    import.meta.env.DEV ? debugParams.get('diagram') === '1' : true,
+    import.meta.env.DEV ? debugParams.get('diagram') !== '0' : true,
   );
   const [showFigure, setShowFigure] = useState(
     import.meta.env.DEV ? debugParams.get('figure') !== '0' : true,
   );
+  const missingVariables = useMemo(() => Object.values(doc?.measurements ?? {})
+    .filter(measurement => !measurement.hasValue)
+    .map(measurement => measurement.name), [doc]);
 
   if (!doc) return (
     <>
@@ -162,21 +176,27 @@ function Layout() {
           </span>
         </div>
       )}
-      <div className="panels">
-        <Profiler id="EditorPanel" onRender={logProfile}>
-          <EditorPanel />
-        </Profiler>
-        {showDiagram && (
-          <>
-            <div className="panel-divider" />
-            <Profiler id="DiagramPanel" onRender={logProfile}>
-              <DiagramPanel highlighted={highlighted} />
-            </Profiler>
-          </>
-        )}
+      <CategorySelector placement="desktop" />
+      <div className="workspace-split">
+        <div className="workspace-left">
+          {showDiagram && (
+            <div className="workspace-diagram">
+              <Profiler id="DiagramPanel" onRender={logProfile}>
+                <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
+                  selected={selected} missingVariables={missingVariables} />
+              </Profiler>
+            </div>
+          )}
+          <CategorySelector placement="mobile" />
+          <Profiler id="EditorPanel" onRender={logProfile}>
+            <EditorPanel />
+          </Profiler>
+          <Profiler id="MeasurementEditorPanel" onRender={logProfile}>
+            <MeasurementEditorPanel />
+          </Profiler>
+        </div>
         {showFigure && (
-          <>
-            <div className="panel-divider" />
+          <div className="workspace-right">
             <Profiler id="FigurePanel" onRender={logProfile}>
               <FigurePanel
                 doc={doc}
@@ -185,7 +205,7 @@ function Layout() {
                 projectionRatioEnabled={projectionRatioEnabled}
               />
             </Profiler>
-          </>
+          </div>
         )}
       </div>
     </div>
