@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { CATEGORY_LABELS, CATEGORY_LETTERS, idToCategory } from '../catalog';
 import { useAppState, useDispatch } from '../store';
 
@@ -9,6 +9,39 @@ interface CategorySelectorProps {
 function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
   const { doc, activeCategory } = useAppState();
   const dispatch = useDispatch();
+  const selectorRef = useRef<HTMLElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollIndicators = useCallback(() => {
+    const selector = selectorRef.current;
+    if (!selector) return;
+
+    setCanScrollLeft(selector.scrollLeft > 1);
+    setCanScrollRight(selector.scrollLeft + selector.clientWidth < selector.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const selector = selectorRef.current;
+    if (!selector) return;
+
+    const resizeObserver = new ResizeObserver(updateScrollIndicators);
+    resizeObserver.observe(selector);
+    selector.addEventListener('scroll', updateScrollIndicators, { passive: true });
+    const frame = requestAnimationFrame(updateScrollIndicators);
+
+    return () => {
+      cancelAnimationFrame(frame);
+      resizeObserver.disconnect();
+      selector.removeEventListener('scroll', updateScrollIndicators);
+    };
+  }, [activeCategory, updateScrollIndicators]);
+
+  useEffect(() => {
+    const selector = selectorRef.current;
+    const activeTab = selector?.querySelector<HTMLElement>('.cat-tab.is-active');
+    activeTab?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+  }, [activeCategory]);
 
   if (!doc) return null;
 
@@ -18,29 +51,86 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
   );
   const hasCustom = measurements.some(measurement => !idToCategory(measurement.id));
 
+  function labelParts(category: string): { letter: string; name: string } {
+    const label = CATEGORY_LABELS[category] ?? category;
+    const [letter, ...rest] = label.split('—');
+    return {
+      letter: letter.trim(),
+      name: rest.length > 0 ? rest.join('—').trim() : label,
+    };
+  }
+
+  function activeLabel(category: string): { chip: string; name: string } {
+    if (category === 'custom') return { chip: '*', name: 'Custom' };
+    if (category === 'all') return { chip: 'All', name: 'Measurements' };
+    return { chip: labelParts(category).letter, name: labelParts(category).name };
+  }
+
+  function scrollCategories(direction: -1 | 1) {
+    selectorRef.current?.scrollBy({ left: direction * 160, behavior: 'smooth' });
+  }
+
   return (
-    <nav className={`category-selector category-selector-${placement}`} aria-label="Measurement category">
-      {availableCategories.map(letter => (
-        <button key={letter} className={`cat-tab${activeCategory === letter ? ' is-active' : ''}`}
-          title={CATEGORY_LABELS[letter]}
-          onClick={() => dispatch({ type: 'SET_CATEGORY', category: letter })}>
-          {letter}
-        </button>
-      ))}
-      {hasCustom && (
-        <button className={`cat-tab${activeCategory === 'custom' ? ' is-active' : ''}`}
-          title="Custom measurements"
-          onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'custom' })}>
-          *
-        </button>
-      )}
-      <button className={`cat-tab${activeCategory === 'all' ? ' is-active' : ''}`}
-        title="All measurements"
-        onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'all' })}>
-        All
+    <div className={`category-selector-shell category-selector-shell-${placement}`}>
+      <button type="button"
+        className={`category-scroll-button is-left${canScrollLeft ? ' is-visible' : ''}`}
+        aria-label="Scroll categories left"
+        onClick={() => scrollCategories(-1)}>
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="M10 3 5 8l5 5" />
+        </svg>
       </button>
-      <span className="cat-tab-label">{CATEGORY_LABELS[activeCategory] ?? activeCategory}</span>
-    </nav>
+      <nav ref={selectorRef} className={`category-selector category-selector-${placement}`} aria-label="Measurement category">
+        {availableCategories.map(letter => (
+          <button key={letter} className={`cat-tab${activeCategory === letter ? ' is-active' : ''}`}
+            title={CATEGORY_LABELS[letter]}
+            onClick={() => dispatch({ type: 'SET_CATEGORY', category: letter })}>
+            {activeCategory === letter ? (
+              <>
+                <span className="cat-tab-chip">{activeLabel(letter).chip}</span>
+                <span className="cat-tab-name">{activeLabel(letter).name}</span>
+              </>
+            ) : (
+              <span className="cat-tab-letter">{letter}</span>
+            )}
+          </button>
+        ))}
+        {hasCustom && (
+          <button className={`cat-tab${activeCategory === 'custom' ? ' is-active' : ''}`}
+            title="Custom measurements"
+            onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'custom' })}>
+            {activeCategory === 'custom' ? (
+              <>
+                <span className="cat-tab-chip">{activeLabel('custom').chip}</span>
+                <span className="cat-tab-name">{activeLabel('custom').name}</span>
+              </>
+            ) : (
+              <span className="cat-tab-letter">*</span>
+            )}
+          </button>
+        )}
+        <button className={`cat-tab${activeCategory === 'all' ? ' is-active' : ''}`}
+          title="All measurements"
+          onClick={() => dispatch({ type: 'SET_CATEGORY', category: 'all' })}>
+          {activeCategory === 'all' ? (
+            <>
+              <span className="cat-tab-chip">{activeLabel('all').chip}</span>
+              <span className="cat-tab-name">{activeLabel('all').name}</span>
+            </>
+          ) : (
+            <span className="cat-tab-letter">All</span>
+          )}
+        </button>
+      </nav>
+      <button type="button"
+        className={`category-scroll-button is-right${canScrollRight ? ' is-visible' : ''}`}
+        aria-label="Scroll categories right"
+        onClick={() => scrollCategories(1)}>
+        <svg viewBox="0 0 16 16" aria-hidden="true">
+          <path d="m6 3 5 5-5 5" />
+        </svg>
+      </button>
+    </div>
   );
 }
 
