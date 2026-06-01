@@ -1,7 +1,7 @@
 import { memo, useRef, useEffect, useMemo, useState } from 'react';
 import type { SeamlyDocument } from '@seamlyme/core';
 import { useDispatch } from '../store';
-import { renderFigure, FIGURE_MEASUREMENTS, primaryVar } from '../figure/renderer';
+import { getFigureLandmark, renderFigure } from '../figure/renderer';
 
 const SKIN_PRESETS = [
   { name: 'Porcelain', color: '#f7d9c4' },
@@ -51,8 +51,12 @@ function FigurePanel({ doc, highlighted, skinColor, projectionRatioEnabled }: Fi
 
     if (!highlighted) return;
 
-    container.querySelectorAll<SVGElement>(`[data-pvar="${CSS.escape(highlighted)}"]`)
-      .forEach(el => el.classList.add('is-guide-active'));
+    container.querySelectorAll<SVGElement>('[data-vars]')
+      .forEach(el => {
+        if (el.dataset.vars?.split(' ').includes(highlighted)) {
+          el.classList.add('is-guide-active');
+        }
+      });
   }, [highlighted]);
 
   // Wire guide hover/click via event delegation after HTML injection
@@ -72,8 +76,8 @@ function FigurePanel({ doc, highlighted, skinColor, projectionRatioEnabled }: Fi
     function onMouseEnter(e: MouseEvent) {
       const guide = getGuideEl(e.target);
       if (!guide) return;
-      const pvar = guide.dataset?.pvar;
-      if (pvar) dispatch({ type: 'SET_HIGHLIGHT', name: pvar });
+      const variable = guide.dataset?.vars?.split(' ')[0];
+      if (variable) dispatch({ type: 'SET_HIGHLIGHT', name: variable });
     }
     function onMouseLeave(e: MouseEvent) {
       const guide = getGuideEl(e.target);
@@ -82,41 +86,23 @@ function FigurePanel({ doc, highlighted, skinColor, projectionRatioEnabled }: Fi
     function onClick(e: MouseEvent) {
       const guide = getGuideEl(e.target);
       if (!guide || !doc) return;
-      const idx = Number(guide.dataset.guide?.replace('guide-', ''));
-      const d = FIGURE_MEASUREMENTS[idx];
-      if (!d) return;
-
+      const landmark = getFigureLandmark(doc, guide.dataset.guide ?? '');
+      if (!landmark) return;
       const unit = doc.unit;
-      const R = Object.fromEntries(Object.entries(doc.measurements).map(([k,m]) => [k, m.resolved ?? 0]));
-      const hVar = d.hVar && R[d.hVar] > 0
-        ? d.hVar
-        : d.hFB && R[d.hFB] > 0
-          ? d.hFB
-          : null;
-      let computedHeight: number | null = null;
-      if (!hVar && d.hFn) {
-        try {
-          computedHeight = d.hFn(R);
-        } catch {
-          computedHeight = null;
-        }
-      }
       setDepInfo({
-        name: d.name,
-        wVar: d.wVar ?? null,
-        hVar,
-        hCalc: !hVar && d.hFn ? d.hCalc ?? 'computed' : null,
-        hDeps: !hVar && d.hFn ? d.hDeps ?? [] : [],
-        wVal: d.wVar ? (R[d.wVar] > 0 ? `${R[d.wVar].toFixed(2)} ${unit}` : '—') : '—',
-        hVal: hVar
-          ? `${R[hVar].toFixed(2)} ${unit}`
-          : computedHeight && computedHeight > 0
-            ? `${computedHeight.toFixed(2)} ${unit}`
+        name: landmark.label,
+        wVar: landmark.widthVariable,
+        hVar: landmark.heightVariable,
+        hCalc: landmark.heightCalculation,
+        hDeps: landmark.heightDependencies,
+        wVal: landmark.widthValue != null ? `${landmark.widthValue.toFixed(2)} ${unit}` : '—',
+        hVal: landmark.heightValue != null
+            ? `${landmark.heightValue.toFixed(2)} ${unit}`
             : '—',
         unit,
       });
-      const pvar = primaryVar(d);
-      if (pvar) dispatch({ type: 'SET_HIGHLIGHT', name: pvar });
+      const variable = landmark.relatedVariables[0];
+      if (variable) dispatch({ type: 'SET_HIGHLIGHT', name: variable });
     }
 
     container.addEventListener('mouseenter', onMouseEnter, true);

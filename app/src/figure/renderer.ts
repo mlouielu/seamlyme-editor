@@ -16,15 +16,10 @@ const ARC_WIDTH_PAIRS = [
   { arcVar: 'waist_arc_f', widthVar: 'width_waist' },
   { arcVar: 'hip_arc_f',   widthVar: 'width_hip'   },
 ];
-const CIRC_WIDTH_PAIRS = [
-  { circVar: 'bust_circ',  widthVar: 'width_bust'  },
-  { circVar: 'waist_circ', widthVar: 'width_waist' },
-  { circVar: 'hip_circ',   widthVar: 'width_hip'   },
-];
-
 type R = Record<string, number>;
 
 interface FigMeasurement {
+  id: string;
   name: string;
   wVar: string | null;
   wScale?: number;
@@ -32,7 +27,7 @@ interface FigMeasurement {
   hFB?: string;
   hFn?: (r: R) => number | null;
   hCalc?: string;
-  hDeps?: string[];
+  hDeps?: (r: R) => string[];
   widthVar?: string;
 }
 
@@ -46,45 +41,63 @@ const LEG_LEVELS: Array<{ hVar?: string; hFn?: (r: R) => number | null; circVar:
 ];
 
 export const FIGURE_MEASUREMENTS: FigMeasurement[] = [
-  { name: 'Neck back',    wVar: null,                              hVar: 'height_neck_back' },
-  { name: 'Neck arc',     wVar: 'neck_arc_f',      wScale: _HW_ARC, hVar: 'height_neck_front', hFB: 'height_neck_side' },
-  { name: 'Neck width',   wVar: 'neck_width',      wScale: _HW_ARC, hVar: 'height_neck_front', hFB: 'height_neck_side' },
-  { name: 'Neck side',    wVar: 'neck_width',      wScale: _HW_ARC,
+  { id: 'neck-back', name: 'Neck back',    wVar: null,                              hVar: 'height_neck_back' },
+  { id: 'neck-arc', name: 'Neck arc',     wVar: 'neck_arc_f',      wScale: _HW_ARC, hVar: 'height_neck_front', hFB: 'height_neck_side' },
+  { id: 'neck-width', name: 'Neck width',   wVar: 'neck_width',      wScale: _HW_ARC, hVar: 'height_neck_front', hFB: 'height_neck_side' },
+  { id: 'neck-side', name: 'Neck side',    wVar: 'neck_width',      wScale: _HW_ARC,
     hFn: r => offsetUp(r.height_waist_front, r.neck_side_to_waist_f) ?? offsetUp(r.height_waist_front, r.neck_side_to_waist_side_f) ?? r.height_neck_side,
     hCalc: 'height_waist_front + neck_side_to_waist_f',
-    hDeps: ['height_waist_front', 'neck_side_to_waist_f', 'neck_side_to_waist_side_f', 'height_neck_side'] },
-  { name: 'Shoulder tip', wVar: 'shoulder_tip_to_shoulder_tip_f', wScale: _HW_ARC, widthVar: 'width_shoulder',
+    hDeps: r => r.height_waist_front > 0 && r.neck_side_to_waist_f > 0
+      ? ['height_waist_front', 'neck_side_to_waist_f']
+      : r.height_waist_front > 0 && r.neck_side_to_waist_side_f > 0
+        ? ['height_waist_front', 'neck_side_to_waist_side_f']
+        : ['height_neck_side'] },
+  { id: 'shoulder-tip', name: 'Shoulder tip', wVar: 'shoulder_tip_to_shoulder_tip_f', wScale: _HW_ARC, widthVar: 'width_shoulder',
     hFn: r => shoulderTipHeight(r), hCalc: 'height_neck_front - Δy(neck_front_to_shoulder_tip_f)',
-    hDeps: ['height_neck_front', 'neck_width', 'neck_front_to_shoulder_tip_f', 'height_shoulder_tip'] },
-  { name: 'Highbust',     wVar: 'highbust_arc_f',  wScale: _HW_ARC,
+    hDeps: r => r.height_neck_front > 0 && r.neck_front_to_shoulder_tip_f > 0
+      ? ['height_neck_front', 'neck_width', 'neck_front_to_shoulder_tip_f']
+      : ['height_shoulder_tip'] },
+  { id: 'highbust', name: 'Highbust',     wVar: 'highbust_arc_f',  wScale: _HW_ARC,
     hFn: r => offsetDown(r.height_neck_front, r.neck_front_to_highbust_f) ?? lerp(r.height_armpit, r.height_bustpoint, 0.5),
     hCalc: 'height_neck_front - neck_front_to_highbust_f',
-    hDeps: ['height_neck_front', 'neck_front_to_highbust_f', 'height_armpit', 'height_bustpoint'] },
-  { name: 'Bust',         wVar: 'bust_arc_f',      wScale: _HW_ARC, hVar: 'height_bustpoint' },
-  { name: 'Lowbust',      wVar: 'lowbust_arc_f',   wScale: _HW_ARC,
+    hDeps: r => r.height_neck_front > 0 && r.neck_front_to_highbust_f > 0
+      ? ['height_neck_front', 'neck_front_to_highbust_f']
+      : ['height_armpit', 'height_bustpoint'] },
+  { id: 'bust', name: 'Bust',         wVar: 'bust_arc_f',      wScale: _HW_ARC, hVar: 'height_bustpoint' },
+  { id: 'lowbust', name: 'Lowbust',      wVar: 'lowbust_arc_f',   wScale: _HW_ARC,
     hFn: r => offsetUp(r.height_waist_front, r.lowbust_to_waist_f) ?? lerp(r.height_bustpoint, r.height_waist_side, 0.35),
     hCalc: 'height_waist_front + lowbust_to_waist_f',
-    hDeps: ['height_waist_front', 'lowbust_to_waist_f', 'height_bustpoint', 'height_waist_side'] },
-  { name: 'Rib',          wVar: 'rib_arc_f',       wScale: _HW_ARC,
+    hDeps: r => r.height_waist_front > 0 && r.lowbust_to_waist_f > 0
+      ? ['height_waist_front', 'lowbust_to_waist_f']
+      : ['height_bustpoint', 'height_waist_side'] },
+  { id: 'rib', name: 'Rib',          wVar: 'rib_arc_f',       wScale: _HW_ARC,
     hFn: r => lerp(r.height_bustpoint, r.height_waist_side, 0.68), hCalc: 'lerp(height_bustpoint, height_waist_side, 0.68)',
-    hDeps: ['height_bustpoint', 'height_waist_side'] },
-  { name: 'Waist',        wVar: 'waist_arc_f',     wScale: _HW_ARC, hVar: 'height_waist_side', hFB: 'height_waist_front' },
-  { name: 'Highhip',      wVar: 'highhip_arc_f',   wScale: _HW_ARC, hVar: 'height_highhip' },
-  { name: 'Hip',          wVar: 'hip_arc_f',       wScale: _HW_ARC, hVar: 'height_hip' },
-  { name: 'Crotch',       wVar: null,                              hVar: 'leg_crotch_to_floor' },
-  { name: 'Thigh upper',  wVar: 'leg_thigh_upper_circ', wScale: _HW_CIRC, hVar: 'height_gluteal_fold' },
-  { name: 'Thigh mid',    wVar: 'leg_thigh_mid_circ',   wScale: _HW_CIRC,
+    hDeps: () => ['height_bustpoint', 'height_waist_side'] },
+  { id: 'waist', name: 'Waist',        wVar: 'waist_arc_f',     wScale: _HW_ARC, hVar: 'height_waist_side', hFB: 'height_waist_front' },
+  { id: 'highhip', name: 'Highhip',      wVar: 'highhip_arc_f',   wScale: _HW_ARC, hVar: 'height_highhip' },
+  { id: 'hip', name: 'Hip',          wVar: 'hip_arc_f',       wScale: _HW_ARC, hVar: 'height_hip' },
+  { id: 'crotch', name: 'Crotch',       wVar: null,                              hVar: 'leg_crotch_to_floor' },
+  { id: 'thigh-upper', name: 'Thigh upper',  wVar: 'leg_thigh_upper_circ', wScale: _HW_CIRC, hVar: 'height_gluteal_fold' },
+  { id: 'thigh-mid', name: 'Thigh mid',    wVar: 'leg_thigh_mid_circ',   wScale: _HW_CIRC,
     hFn: r => lerp(r.height_gluteal_fold, r.height_knee, 0.5), hCalc: 'lerp(height_gluteal_fold, height_knee, 0.5)',
-    hDeps: ['height_gluteal_fold', 'height_knee'] },
-  { name: 'Knee',         wVar: 'leg_knee_circ',   wScale: _HW_CIRC, hVar: 'height_knee' },
-  { name: 'Calf',         wVar: 'leg_calf_circ',   wScale: _HW_CIRC, hVar: 'height_calf' },
-  { name: 'Ankle high',   wVar: 'leg_ankle_high_circ', wScale: _HW_CIRC, hVar: 'height_ankle_high' },
-  { name: 'Ankle',        wVar: 'leg_ankle_circ',  wScale: _HW_CIRC, hVar: 'height_ankle' },
+    hDeps: () => ['height_gluteal_fold', 'height_knee'] },
+  { id: 'knee', name: 'Knee',         wVar: 'leg_knee_circ',   wScale: _HW_CIRC, hVar: 'height_knee' },
+  { id: 'calf', name: 'Calf',         wVar: 'leg_calf_circ',   wScale: _HW_CIRC, hVar: 'height_calf' },
+  { id: 'ankle-high', name: 'Ankle high',   wVar: 'leg_ankle_high_circ', wScale: _HW_CIRC, hVar: 'height_ankle_high' },
+  { id: 'ankle', name: 'Ankle',        wVar: 'leg_ankle_circ',  wScale: _HW_CIRC, hVar: 'height_ankle' },
 ];
 
-/** Primary variable for a figure measurement (used for cross-panel linking). */
-export function primaryVar(d: FigMeasurement): string | null {
-  return d.wVar ?? d.hVar ?? null;
+export interface FigureLandmark {
+  id: string;
+  label: string;
+  widthVariable: string | null;
+  widthValue: number | null;
+  heightVariable: string | null;
+  heightValue: number | null;
+  heightCalculation: string | null;
+  heightDependencies: string[];
+  relatedVariables: string[];
+  confidence: 'measured' | 'derived' | 'fallback' | 'missing';
 }
 
 const GUIDE_GROUP_COLORS: Record<string, { label: string; color: string }> = {
@@ -141,21 +154,6 @@ function bustPointHalfWidth(R: R): number | null {
   if (R.bust_arc_f > 0) return R.bust_arc_f * _HW_ARC * 0.5;
   return null;
 }
-function handTipHeight(R: R): number | null {
-  if (R.height_armpit > 0 && R.arm_armpit_to_wrist > 0 && R.hand_length > 0)
-    return R.height_armpit - R.arm_armpit_to_wrist - R.hand_length;
-  const shoulderH = shoulderTipHeight(R) ?? (R.height_shoulder_tip > 0 ? R.height_shoulder_tip : null);
-  if (R.arm_neck_side_to_finger_tip > 0) {
-    const neckSideH = neckSideHeight(R);
-    if (neckSideH != null && neckSideH > 0) return neckSideH - R.arm_neck_side_to_finger_tip;
-  }
-  if (!(shoulderH != null && shoulderH > 0)) return null;
-  const armLength = R.arm_shoulder_tip_to_wrist > 0 ? R.arm_shoulder_tip_to_wrist : R.arm_shoulder_tip_to_wrist_bent;
-  if (!(armLength > 0)) return null;
-  const handLen = R.hand_length > 0 ? R.hand_length : 0;
-  return handLen > 0 ? shoulderH - armLength - handLen : null;
-}
-
 function arcWidthRatio(R: R): number {
   const ratios = ARC_WIDTH_PAIRS
     .map(p => (R[p.arcVar] > 0 && R[p.widthVar] > 0) ? R[p.widthVar] / R[p.arcVar] : null)
@@ -163,14 +161,6 @@ function arcWidthRatio(R: R): number {
   if (!ratios.length) return DEFAULT_ARC_WIDTH_RATIO;
   return clampN(ratios.reduce((s, v) => s + v, 0) / ratios.length, 0.55, 1.05);
 }
-function circWidthRatio(R: R): number {
-  const ratios = CIRC_WIDTH_PAIRS
-    .map(p => (R[p.circVar] > 0 && R[p.widthVar] > 0) ? R[p.widthVar] / R[p.circVar] : null)
-    .filter((v): v is number => v !== null && isFinite(v));
-  if (!ratios.length) return 1 / Math.PI;
-  return clampN(ratios.reduce((s, v) => s + v, 0) / ratios.length, 0.28, 0.48);
-}
-
 function projectedWidth(d: FigMeasurement, R: R, arcRatio: number): number | null {
   if (d.name === 'Shoulder tip') {
     const hw = shoulderTipHalfWidth(R);
@@ -183,11 +173,64 @@ function projectedWidth(d: FigMeasurement, R: R, arcRatio: number): number | nul
   return R[d.wVar];
 }
 
-function resolveH(d: FigMeasurement, R: R): number | null {
-  if (d.hVar) { const h = R[d.hVar]; if (h > 0) return h; }
-  if (d.hFB)  { const h = R[d.hFB];  if (h > 0) return h; }
-  if (d.hFn)  { try { const h = d.hFn(R); if (h != null && h > 0) return h; } catch {} }
-  return null;
+function resolveLandmark(d: FigMeasurement, R: R): FigureLandmark {
+  let heightVariable: string | null = null;
+  let heightValue: number | null = null;
+  let heightCalculation: string | null = null;
+  let heightDependencies: string[] = [];
+  let confidence: FigureLandmark['confidence'] = 'missing';
+
+  if (d.hVar && R[d.hVar] > 0) {
+    heightVariable = d.hVar;
+    heightValue = R[d.hVar];
+    confidence = 'measured';
+  } else if (d.hFB && R[d.hFB] > 0) {
+    heightVariable = d.hFB;
+    heightValue = R[d.hFB];
+    confidence = 'fallback';
+  } else if (d.hFn) {
+    try {
+      const computed = d.hFn(R);
+      if (computed != null && computed > 0) {
+        heightValue = computed;
+        confidence = 'derived';
+      }
+    } catch {}
+    heightCalculation = d.hCalc ?? 'computed';
+    heightDependencies = d.hDeps?.(R) ?? [];
+  }
+
+  const relatedVariables = [
+    d.wVar,
+    d.widthVar,
+    heightVariable,
+    ...heightDependencies,
+  ].filter((name): name is string => Boolean(name));
+
+  return {
+    id: d.id,
+    label: d.name,
+    widthVariable: d.wVar,
+    widthValue: d.wVar && R[d.wVar] > 0 ? R[d.wVar] : null,
+    heightVariable,
+    heightValue,
+    heightCalculation,
+    heightDependencies,
+    relatedVariables: [...new Set(relatedVariables)],
+    confidence,
+  };
+}
+
+export function getFigureLandmarks(doc: SeamlyDocument): FigureLandmark[] {
+  const values: R = {};
+  for (const [name, measurement] of Object.entries(doc.measurements)) {
+    values[name] = measurement.resolved ?? 0;
+  }
+  return FIGURE_MEASUREMENTS.map(definition => resolveLandmark(definition, values));
+}
+
+export function getFigureLandmark(doc: SeamlyDocument, id: string): FigureLandmark | null {
+  return getFigureLandmarks(doc).find(landmark => landmark.id === id) ?? null;
 }
 
 function guideGroupForName(name: string) {
@@ -356,13 +399,11 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
   const { fill: bodyFill, fillSoft: bodyFillSoft, stroke: bodyStroke } = palette;
 
   const arcRatio = opts.projectionRatioEnabled ? arcWidthRatio(R) : 1;
-  circWidthRatio(R); // computed but used implicitly via _HW_CIRC
-
   const items: Array<FigMeasurement & {
     hVal: number; wVal: number | null; pWidth: number | null;
     lineY: number; halfW: number; labelY: number;
   }> = FIGURE_MEASUREMENTS.map(d => {
-    const hVal = resolveH(d, R);
+    const hVal = resolveLandmark(d, R).heightValue;
     const wVal = d.wVar ? (R[d.wVar] > 0 ? R[d.wVar] : null) : null;
     const pWidth = projectedWidth(d, R, arcRatio);
     return { ...d, hVal: hVal ?? 0, wVal, pWidth };
@@ -383,20 +424,50 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
     ? R['shoulder_tip_to_shoulder_tip_f'] * _HW_ARC
     : null;
 
-  const armLength  = R['arm_shoulder_tip_to_wrist'] > 0 ? R['arm_shoulder_tip_to_wrist'] : R['arm_shoulder_tip_to_wrist_bent'];
-  const elbowLength = R['arm_shoulder_tip_to_elbow'] > 0 ? R['arm_shoulder_tip_to_elbow'] : R['arm_shoulder_tip_to_elbow_bent'];
+  const straightArmLength = R['arm_shoulder_tip_to_wrist'] > 0
+    ? R['arm_shoulder_tip_to_wrist']
+    : R['arm_shoulder_tip_to_wrist_bent'];
+  const straightElbowLength = R['arm_shoulder_tip_to_elbow'] > 0
+    ? R['arm_shoulder_tip_to_elbow']
+    : R['arm_armpit_to_elbow'] > 0
+      ? R['arm_armpit_to_elbow']
+      : R['arm_shoulder_tip_to_elbow_bent'];
+  const straightForearmLength = R['arm_elbow_to_wrist'] > 0
+    ? R['arm_elbow_to_wrist']
+    : R['arm_elbow_to_wrist_inside'] > 0
+      ? R['arm_elbow_to_wrist_inside']
+      : straightArmLength > straightElbowLength
+        ? straightArmLength - straightElbowLength
+        : straightArmLength * 0.52;
+  const bentArmLength = R['arm_shoulder_tip_to_wrist_bent'] > 0
+    ? R['arm_shoulder_tip_to_wrist_bent']
+    : straightArmLength;
+  const bentElbowLength = R['arm_shoulder_tip_to_elbow_bent'] > 0
+    ? R['arm_shoulder_tip_to_elbow_bent']
+    : straightElbowLength;
+  const bentUpperLength = bentElbowLength > 0 ? bentElbowLength : bentArmLength * 0.48;
+  const bentForearmLength = R['arm_elbow_to_wrist_bent'] > 0
+    ? R['arm_elbow_to_wrist_bent']
+    : bentArmLength > bentUpperLength
+      ? bentArmLength - bentUpperLength
+      : bentArmLength * 0.52;
   const shoulderHVal = shoulderTipHeight(R);
-  const handTipHVal  = handTipHeight(R);
-
-  const armFigure = (shoulderHVal != null && shoulderHVal > 0 && shoulderHalfWVal != null && shoulderHalfWVal > 0 && armLength > 0) ? {
+  const armFigure = (shoulderHVal != null && shoulderHVal > 0 && shoulderHalfWVal != null && shoulderHalfWVal > 0 && straightArmLength > 0 && bentArmLength > 0) ? {
     shoulderH: shoulderHVal,
-    elbowH: elbowLength > 0 ? shoulderHVal - elbowLength : null,
-    wristH: shoulderHVal - armLength,
-    handTipH: handTipHVal,
+    straightUpperLength: (straightElbowLength > 0 ? straightElbowLength : straightArmLength * 0.48) * scale,
+    straightForearmLength: straightForearmLength * scale,
+    bentUpperLength: bentUpperLength * scale,
+    bentForearmLength: bentForearmLength * scale,
+    handLength: (R['hand_length'] > 0 ? R['hand_length'] : 0) * scale,
+    armfoldLength: (R['arm_shoulder_tip_to_armfold_line'] > 0 ? R['arm_shoulder_tip_to_armfold_line'] : 0) * scale,
     shoulderHalfW: shoulderHalfWVal * scale,
-    upperRadius: ((R['body_armfold_circ'] > 0 ? R['body_armfold_circ'] : R['body_bust_circ']) || 0) * _HW_CIRC * scale * 0.22,
-    elbowRadius: R['arm_elbow_circ_bent'] > 0 ? R['arm_elbow_circ_bent'] * _HW_CIRC * scale : 0,
-    wristRadius: R['arm_wrist_circ'] > 0 ? R['arm_wrist_circ'] * _HW_CIRC * scale : 0,
+    shoulderRadius: (R['armscye_width'] > 0 ? R['armscye_width'] * 0.5 : R['armscye_circ'] > 0 ? R['armscye_circ'] * _HW_CIRC * 0.5 : 0) * scale,
+    upperRadius: ((R['arm_upper_circ'] > 0 ? R['arm_upper_circ'] : R['body_armfold_circ'] > 0 ? R['body_armfold_circ'] * 0.22 : R['body_bust_circ'] * 0.22) || 0) * _HW_CIRC * scale * 0.5,
+    aboveElbowRadius: R['arm_above_elbow_circ'] > 0 ? R['arm_above_elbow_circ'] * _HW_CIRC * scale * 0.5 : 0,
+    straightElbowRadius: (R['arm_elbow_circ'] > 0 ? R['arm_elbow_circ'] : R['arm_elbow_circ_bent']) * _HW_CIRC * scale * 0.5,
+    bentElbowRadius: (R['arm_elbow_circ_bent'] > 0 ? R['arm_elbow_circ_bent'] : R['arm_elbow_circ']) * _HW_CIRC * scale * 0.5,
+    lowerRadius: R['arm_lower_circ'] > 0 ? R['arm_lower_circ'] * _HW_CIRC * scale * 0.5 : 0,
+    wristRadius: R['arm_wrist_circ'] > 0 ? R['arm_wrist_circ'] * _HW_CIRC * scale * 0.5 : 0,
   } : null;
 
   const legLevels = LEG_LEVELS.map(d => {
@@ -420,7 +491,9 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
     ? Math.max(...wItems.map(d => (d.pWidth != null ? d.pWidth*_HW_WIDTH : (d.wVal??0)*(d.wScale??_HW_ARC))*scale))
     : 48;
   if (armFigure) {
-    const armReach = armFigure.shoulderHalfW + Math.max(armFigure.upperRadius||14, armFigure.elbowRadius||10, armFigure.wristRadius||6);
+    const straightReach = Math.max(armFigure.upperRadius||14, armFigure.straightElbowRadius||10, armFigure.wristRadius||6);
+    const bentReach = armFigure.bentUpperLength * 0.48 + Math.max(armFigure.bentElbowRadius||10, armFigure.wristRadius||6);
+    const armReach = armFigure.shoulderHalfW + Math.max(straightReach, bentReach);
     maxHalfW = Math.max(maxHalfW, armReach);
   }
   if (legFigure) {
@@ -494,12 +567,14 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
   }
   outlineR.sort((a,b) => a[1]-b[1]);
 
-  const outlineL = outlineR.slice().reverse().map(([x,y]): [number,number] => [2*AXIS_X-x,y]);
-  const floorL = outlineL[0];
-  const outlinePath = crPath(outlineR) +
-    ` L ${floorL[0].toFixed(1)} ${floorL[1].toFixed(1)}` +
-    crPath(outlineL, false) + ' Z';
-  S.push(`<path d="${outlinePath}" fill="${bodyFillSoft}" fill-opacity="0.22" stroke="${bodyStroke}" stroke-width="1.5" stroke-opacity="0.55" stroke-linejoin="round"/>`);
+  if (outlineR.length >= 2) {
+    const outlineL = outlineR.slice().reverse().map(([x,y]): [number,number] => [2*AXIS_X-x,y]);
+    const floorL = outlineL[0];
+    const outlinePath = crPath(outlineR) +
+      ` L ${floorL[0].toFixed(1)} ${floorL[1].toFixed(1)}` +
+      crPath(outlineL, false) + ' Z';
+    S.push(`<path d="${outlinePath}" fill="${bodyFillSoft}" fill-opacity="0.22" stroke="${bodyStroke}" stroke-width="1.5" stroke-opacity="0.55" stroke-linejoin="round"/>`);
+  }
 
   // Legs
   if (legFigure) {
@@ -537,30 +612,71 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
   // Arms
   if (armFigure) {
     const shoulderY = toY(armFigure.shoulderH);
-    const elbowY = armFigure.elbowH != null && armFigure.elbowH > 0
-      ? toY(armFigure.elbowH)
-      : shoulderY + (toY(armFigure.wristH) - shoulderY)*0.58;
-    const wristY = toY(armFigure.wristH);
-    const upperR = Math.max(armFigure.upperRadius||0, armFigure.elbowRadius||0, 8);
-    const elbowR = Math.max(armFigure.elbowRadius||upperR*0.7, 6);
-    const wristR = Math.max(armFigure.wristRadius||elbowR*0.55, 4);
-    const handR  = wristR*1.25;
-    const handTipY = armFigure.handTipH != null && armFigure.handTipH > 0 ? toY(armFigure.handTipH) : wristY+handR*1.8;
+    const shoulderR = clampN(armFigure.shoulderRadius||armFigure.upperRadius||8, 6, 14);
+    const upperR = clampN(armFigure.upperRadius||shoulderR*0.86, 5, shoulderR);
+    const aboveElbowR = clampN(armFigure.aboveElbowRadius||upperR*0.82, 4.5, upperR);
+    const straightElbowR = clampN(armFigure.straightElbowRadius||aboveElbowR*0.88, 4, aboveElbowR);
+    const bentElbowR = clampN(armFigure.bentElbowRadius||aboveElbowR*0.9, 4, aboveElbowR);
+    const lowerR = clampN(armFigure.lowerRadius||straightElbowR*0.76, 3.5, straightElbowR);
+    const wristR = clampN(armFigure.wristRadius||lowerR*0.68, 3, lowerR);
+    const handR  = wristR*1.12;
+    const handLength = armFigure.handLength > 0 ? armFigure.handLength : Math.max(handR*2.6, 14);
+    const leftShoulderX = AXIS_X-armFigure.shoulderHalfW;
+    const rightShoulderX = AXIS_X+armFigure.shoulderHalfW;
 
-    function armPath(side: number) {
-      const sx = AXIS_X+side*armFigure!.shoulderHalfW;
-      return [
-        `M ${(sx-side*Math.max(upperR*0.25,3)).toFixed(1)} ${shoulderY.toFixed(1)}`,
-        `C ${(sx-side*Math.max(upperR*0.25,3)).toFixed(1)} ${(shoulderY+22).toFixed(1)} ${(sx-side*Math.max(elbowR*0.25,3)).toFixed(1)} ${(elbowY-18).toFixed(1)} ${(sx-side*Math.max(elbowR*0.25,3)).toFixed(1)} ${elbowY.toFixed(1)}`,
-        `C ${(sx-side*Math.max(elbowR*0.25,3)).toFixed(1)} ${(elbowY+18).toFixed(1)} ${(sx-side*Math.max(wristR*0.35,2)).toFixed(1)} ${(wristY-12).toFixed(1)} ${(sx-side*Math.max(wristR*0.35,2)).toFixed(1)} ${wristY.toFixed(1)}`,
-        `C ${(sx-side*Math.max(handR*0.45,3)).toFixed(1)} ${(wristY+7).toFixed(1)} ${(sx-side*Math.max(handR*0.45,3)).toFixed(1)} ${(handTipY-5).toFixed(1)} ${sx.toFixed(1)} ${handTipY.toFixed(1)}`,
-        `C ${(sx+side*handR).toFixed(1)} ${(handTipY-5).toFixed(1)} ${(sx+side*handR).toFixed(1)} ${(wristY+7).toFixed(1)} ${(sx+side*wristR).toFixed(1)} ${wristY.toFixed(1)}`,
-        `C ${(sx+side*wristR).toFixed(1)} ${(wristY-12).toFixed(1)} ${(sx+side*(elbowR+4)).toFixed(1)} ${(elbowY+18).toFixed(1)} ${(sx+side*(elbowR+4)).toFixed(1)} ${elbowY.toFixed(1)}`,
-        `C ${(sx+side*(elbowR+4)).toFixed(1)} ${(elbowY-18).toFixed(1)} ${(sx+side*upperR).toFixed(1)} ${(shoulderY+22).toFixed(1)} ${(sx+side*upperR).toFixed(1)} ${shoulderY.toFixed(1)} Z`,
-      ].join(' ');
+    interface ArmPoint { x: number; y: number; r: number }
+
+    function pointAlong(a: ArmPoint, b: ArmPoint, t: number, r: number): ArmPoint {
+      return { x:a.x+(b.x-a.x)*t, y:a.y+(b.y-a.y)*t, r };
     }
-    S.push(`<path d="${armPath(-1)}" fill="${bodyFill}" fill-opacity="0.2" stroke="${bodyStroke}" stroke-width="1.3" stroke-opacity="0.55" stroke-linejoin="round"/>`);
-    S.push(`<path d="${armPath(1)}" fill="${bodyFill}" fill-opacity="0.2" stroke="${bodyStroke}" stroke-width="1.3" stroke-opacity="0.55" stroke-linejoin="round"/>`);
+    function edgePoints(points: ArmPoint[], direction: number): [number,number][] {
+      return points.map((p, index) => {
+        const before = points[Math.max(0,index-1)];
+        const after = points[Math.min(points.length-1,index+1)];
+        const dx = after.x-before.x, dy = after.y-before.y;
+        const length = Math.hypot(dx,dy)||1;
+        return [p.x-direction*dy/length*p.r, p.y+direction*dx/length*p.r];
+      });
+    }
+    function limbOutline(points: ArmPoint[]): string {
+      const left = edgePoints(points,1), right = edgePoints(points,-1).reverse();
+      return crPath(left)+` L ${right[0][0].toFixed(1)} ${right[0][1].toFixed(1)}`+crPath(right,false)+' Z';
+    }
+    function surfacePath(points: ArmPoint[], direction: number): string {
+      return crPath(edgePoints(points,direction));
+    }
+    function armPoints(shoulderX: number, upperLength: number, forearmLength: number, bent: boolean, elbowR: number): ArmPoint[] {
+      const upperVector = bent ? { x:-0.59, y:0.81 } : { x:0.16, y:0.99 };
+      const forearmVector = bent ? { x:0.54, y:0.84 } : { x:-0.04, y:1 };
+      const shoulder = { x:shoulderX, y:shoulderY, r:shoulderR };
+      const elbow = { x:shoulder.x+upperLength*upperVector.x, y:shoulder.y+upperLength*upperVector.y, r:elbowR };
+      const wrist = { x:elbow.x+forearmLength*forearmVector.x, y:elbow.y+forearmLength*forearmVector.y, r:wristR };
+      const armfoldT = armFigure!.armfoldLength > 0 ? clampN(armFigure!.armfoldLength/upperLength,0.2,0.72) : 0.38;
+      const hand = { x:wrist.x+handLength*forearmVector.x*0.48, y:wrist.y+handLength*forearmVector.y*0.48, r:handR };
+      const fingerTip = { x:wrist.x+handLength*forearmVector.x, y:wrist.y+handLength*forearmVector.y, r:1.2 };
+      return [
+        shoulder,
+        pointAlong(shoulder,elbow,armfoldT,upperR),
+        pointAlong(shoulder,elbow,0.82,aboveElbowR),
+        elbow,
+        pointAlong(elbow,wrist,0.56,lowerR),
+        wrist,
+        hand,
+        fingerTip,
+      ];
+    }
+    const bentArm = armPoints(leftShoulderX,armFigure.bentUpperLength,armFigure.bentForearmLength,true,bentElbowR);
+    const straightArm = armPoints(rightShoulderX,armFigure.straightUpperLength,armFigure.straightForearmLength,false,straightElbowR);
+    const armTitle = escXml('Arm contours use L01-L16: bent pose on left, straight pose on right');
+    S.push(`<g fill="${bodyFill}" fill-opacity="0.2" stroke="${bodyStroke}" stroke-width="1.3" stroke-opacity="0.55" stroke-linejoin="round">`);
+    S.push(`<title>${armTitle}</title>`);
+    S.push(`<path d="${limbOutline(bentArm)}"/>`);
+    S.push(`<path d="${limbOutline(straightArm)}"/>`);
+    S.push(`</g>`);
+    S.push(`<g fill="none" stroke="#0f766e" stroke-width="0.8" stroke-opacity="0.42" stroke-dasharray="3 3">`);
+    S.push(`<path d="${surfacePath(bentArm.slice(0,6),1)}"><title>${escXml('L01 outside bent-arm surface; L02 and L03 split at the elbow')}</title></path>`);
+    S.push(`<path d="${surfacePath(straightArm.slice(0,6),-1)}"><title>${escXml('L05 outside straight-arm surface; L06 and L07 split at the elbow')}</title></path>`);
+    S.push(`</g>`);
   }
 
   // Inseam
@@ -616,7 +732,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
     const ty = +toY(R['height']).toFixed(1);
     const hCm = fmtCm(R['height'], unit);
     S.push(`<line x1="${AXIS_X-floorExt}" y1="${ty}" x2="${AXIS_X+floorExt}" y2="${ty}" stroke="#d4d4d8" stroke-width="1" stroke-dasharray="4 4"/>`);
-    S.push(`<text x="${AXIS_X}" y="${ty-6}" text-anchor="middle" font-size="9" fill="#a1a1aa">${nf(R['height'])} ${unit}${hCm ? ` (${hCm} cm)` : ''}</text>`);
+    S.push(`<text x="${AXIS_X}" y="${ty-6}" text-anchor="middle" font-size="9" fill="#a1a1aa">${nf(R['height'])} ${escXml(unit)}${hCm ? ` (${hCm} cm)` : ''}</text>`);
   }
 
   // Guide lines + labels
@@ -632,7 +748,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
     const dash = hasW ? '' : ' stroke-dasharray="5 3"';
     const isLegGuide = legFigure != null && (d.wVar??'').startsWith('leg_');
     const legGuideR = isLegGuide ? Math.max(halfW*(hasW?0.5:1),3) : null;
-    const pVar = primaryVar(d);
+    const landmark = resolveLandmark(d, R);
 
     let x1 = +(AXIS_X-halfW).toFixed(1);
     let x2 = +(AXIS_X+halfW).toFixed(1);
@@ -649,8 +765,8 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
     const cmStr   = fmtCm(dispVal, unit);
     const calc    = `${name}: h=${heightCalcText(d,R)} => ${nf(hVal)} ${unit}; ${hasW ? `w=${widthCalcText(d,R,arcRatio)} => ${nf(dispVal)} ${unit}; ` : ''}`;
     const calcAttr = escXml(calc);
-    const guideId  = `guide-${items.indexOf(d)}`;
-    const gAttr    = `data-guide="${guideId}"${pVar ? ` data-pvar="${escXml(pVar)}"` : ''}`;
+    const guideId  = d.id;
+    const gAttr    = `data-guide="${escXml(guideId)}" data-vars="${escXml(landmark.relatedVariables.join(' '))}"`;
 
     for (const seg of (legSegs ?? [{ x1, x2 }])) {
       S.push(`<line x1="${seg.x1}" y1="${ly}" x2="${seg.x2}" y2="${ly}" stroke="${clr}" stroke-width="${sw}"${dash} ${gAttr} data-calc="${calcAttr}"><title>${calcAttr}</title></line>`);
@@ -670,7 +786,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string |
       `<title>${calcAttr}</title>` +
       `<tspan x="${LABEL_X}" font-weight="600">${escXml(name)}</tspan>` +
       `<tspan x="${VAL_X}">${prefix}: ${nf(dispVal)}` +
-        `<tspan font-size="9" fill="#71717a"> ${unit}${cmStr ? ` (${cmStr} cm)` : ''}</tspan>` +
+        `<tspan font-size="9" fill="#71717a"> ${escXml(unit)}${cmStr ? ` (${cmStr} cm)` : ''}</tspan>` +
       `</tspan></text>`
     );
   }
