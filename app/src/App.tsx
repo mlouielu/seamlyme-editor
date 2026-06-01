@@ -1,13 +1,11 @@
 import { Profiler, useCallback, useMemo, useState, type ProfilerOnRenderCallback } from 'react';
-import { parseSmis } from '@seamlyme/core';
+import { createDocument, parseSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
 import EditorPanel   from './components/EditorPanel';
 import DiagramPanel  from './components/DiagramPanel';
 import FigurePanel   from './components/FigurePanel';
 import MeasurementEditorPanel from './components/MeasurementEditorPanel';
 import CategorySelector from './components/CategorySelector';
-
-const EMPTY_SMIS = '<smis><version>0.3.3</version><unit>cm</unit><read-only>false</read-only><notes/><pm_system/><personal/><body-measurements/></smis>';
 
 const logProfile: ProfilerOnRenderCallback = (
   id,
@@ -21,7 +19,7 @@ const logProfile: ProfilerOnRenderCallback = (
 };
 
 function loadNewSheet(dispatch: ReturnType<typeof useDispatch>) {
-  dispatch({ type: 'LOAD', doc: parseSmis(EMPTY_SMIS), fileName: 'new' });
+  dispatch({ type: 'LOAD', doc: createDocument({ template: 'default', defaultValue: 0 }), fileName: 'new' });
   document.title = 'new - SeamlyME';
 }
 
