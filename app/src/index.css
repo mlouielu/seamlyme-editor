@@ -437,9 +437,6 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 /* ── Figure panel ────────────────────────────────────────────────────────── */
 .figure-panel { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
 
-.figure-controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.control-label { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer; font-weight: 400; text-transform: none; letter-spacing: 0; color: var(--muted); }
-
 .skin-swatches { display: flex; align-items: center; gap: 3px; }
 .skin-swatch {
   width: 16px; height: 16px; padding: 0; border: 1px solid rgba(0,0,0,.15);
@@ -451,34 +448,26 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .figure-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 10px 8px; }
 .figure-container { width: 100%; }
 .figure-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; text-align: center; padding: 32px; line-height: 1.7; }
+.figure-guide-label { cursor: pointer; }
+.figure-guide-label:hover { font-weight: 700; }
 
-/* Ratio panel (inside figure) */
-.ratio-panel { margin: 0 4px 10px; border: 1px solid var(--border); border-radius: var(--radius); background: #fafafa; overflow: hidden; font-size: 11px; }
-.ratio-panel table { width: 100%; border-collapse: collapse; }
-.ratio-panel th, .ratio-panel td { padding: 4px 7px; border-bottom: 1px solid var(--border); text-align: left; vertical-align: top; }
-.ratio-panel th { background: var(--bg); color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .05em; font-size: 10px; }
-.ratio-panel tr:last-child td { border-bottom: 0; }
-.ratio-value { font-variant-numeric: tabular-nums; font-weight: 700; white-space: nowrap; }
-.ratio-note { color: var(--muted); font-size: 10px; line-height: 1.25; }
-
-/* Guide active highlight (applied via JS) */
-.is-guide-active { filter: drop-shadow(0 0 3px currentColor); opacity: 1 !important; }
-
-/* ── Dependency panel ────────────────────────────────────────────────────── */
-.dep-panel {
-  flex-shrink: 0; border-top: 1px solid var(--border); background: #fffbeb;
-  padding: 8px 12px; font-size: 12px;
-}
-.dep-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
-.dep-panel-title  { font-weight: 700; font-size: 13px; }
-.dep-panel-close  { background: none; border: none; cursor: pointer; color: var(--muted); font-size: 14px; padding: 0 2px; }
-.dep-table { width: 100%; border-collapse: collapse; }
-.dep-table td { padding: 3px 6px; vertical-align: middle; }
-.dep-role { color: var(--muted); font-size: 11px; white-space: nowrap; padding-right: 10px !important; }
-.dep-role.muted { font-size: 10px; font-style: italic; }
-.dep-val  { font-family: var(--mono); font-size: 11px; color: var(--text); padding-right: 10px !important; }
-.dep-jump { background: none; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; font-size: 11px; padding: 1px 6px; color: var(--accent); }
-.dep-jump:hover { background: var(--accent-l); }
+.figure-candidates { flex-shrink: 0; max-height: 240px; overflow: auto; padding: 8px 10px; border-top: 1px solid var(--border); background: #fffbeb; font-size: 11px; }
+.figure-candidates-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.figure-candidates-header button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; }
+.figure-candidates-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.figure-candidates h3 { margin: 0 0 4px; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+.figure-candidate-table { width: 100%; border-collapse: collapse; }
+.figure-candidate-table td { padding: 2px 4px; border-top: 1px solid rgba(0,0,0,.06); vertical-align: top; }
+.figure-candidate-table code { font-size: 10px; white-space: normal; overflow-wrap: anywhere; }
+.figure-candidate-mark { width: 10px; color: var(--muted); font-family: var(--mono); }
+.figure-candidate-value { text-align: right; white-space: nowrap; font-family: var(--mono); }
+.figure-candidate-kind { width: 48px; color: var(--muted); font-size: 10px; }
+.figure-candidate-actions { text-align: right; white-space: nowrap; }
+.figure-candidate-actions button { margin-left: 3px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface); color: var(--accent); cursor: pointer; font-size: 10px; }
+.figure-candidate-actions button:hover { background: var(--accent-l); }
+.figure-candidate-table tr.is-used { color: #166534; font-weight: 700; }
+.figure-candidate-table tr.is-missing { color: var(--muted); opacity: .65; }
+.figure-candidate-empty { color: var(--muted); font-style: italic; }
 
 @media (max-width: 700px) {
   .app-header { padding: 7px 10px; gap: 8px; }

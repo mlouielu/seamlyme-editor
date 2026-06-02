@@ -41,7 +41,6 @@ export interface AppState {
   searchSnapshot: SearchSnapshot | null;
   valueFilter: ValueFilter;
   skinColor: string;
-  projectionRatioEnabled: boolean;
 }
 
 const initial: AppState = {
@@ -56,7 +55,6 @@ const initial: AppState = {
   searchSnapshot: null,
   valueFilter: 'all',
   skinColor: localStorage.getItem('skinColor') ?? '#f2c6a0',
-  projectionRatioEnabled: true,
 };
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -76,8 +74,7 @@ export type Action =
   | { type: 'SET_SEARCH'; query: string }
   | { type: 'TOGGLE_GLOBAL_SEARCH' }
   | { type: 'SET_VALUE_FILTER'; filter: ValueFilter }
-  | { type: 'SET_SKIN_COLOR'; color: string }
-  | { type: 'TOGGLE_PROJECTION_RATIO' };
+  | { type: 'SET_SKIN_COLOR'; color: string };
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
@@ -299,9 +296,6 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_SKIN_COLOR':
       localStorage.setItem('skinColor', action.color);
       return { ...state, skinColor: action.color };
-
-    case 'TOGGLE_PROJECTION_RATIO':
-      return { ...state, projectionRatioEnabled: !state.projectionRatioEnabled };
 
     default:
       return state;

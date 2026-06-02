@@ -510,9 +510,9 @@ function renderAll() {
     const shoulderLm = resolved.outline.find(l => l.id === 'shoulder');
     const shoulderTipX = shoulderLm ? (shoulderLm.halfW ?? 0) : totalH * 0.115;
     const shoulderTipY = shoulderLm?.y ?? totalH * 0.831;
-    const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, totalH);
     const L_A = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : totalH * 0.032;
     const armfoldPt = traceOutlineFromShoulder(resolved.outline, shoulderTipX, shoulderTipY, L_A);
+    const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, totalH);
     const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, armfoldPt, totalH, armAngleDeg);
     const headResolved = resolveHeadLandmarks(R, totalH);
     const { html: svgHtml, allLandmarks, rightArmResolved: rArm } = buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH);

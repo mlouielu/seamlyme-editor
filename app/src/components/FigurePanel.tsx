@@ -1,7 +1,11 @@
-import { memo, useRef, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { SeamlyDocument } from '@seamlyme/core';
 import { useDispatch } from '../store';
-import { getFigureLandmark, renderFigure } from '../figure/renderer';
+import {
+  getFigureLandmarkCandidates,
+  renderFigure,
+} from '../figure/renderer';
+import type { ResolveCandidate } from '../figure/common';
 
 const SKIN_PRESETS = [
   { name: 'Porcelain', color: '#f7d9c4' },
@@ -11,152 +15,111 @@ const SKIN_PRESETS = [
   { name: 'Deep',      color: '#8a5a44' },
 ];
 
-interface DepInfo {
-  name: string;
-  wVar: string | null;
-  hVar: string | null;
-  hCalc: string | null;
-  hDeps: string[];
-  wVal: string;
-  hVal: string;
-  unit: string;
-}
-
 interface FigurePanelProps {
   doc: SeamlyDocument | null;
-  highlighted: string | null;
   skinColor: string;
-  projectionRatioEnabled: boolean;
 }
 
-function FigurePanel({ doc, highlighted, skinColor, projectionRatioEnabled }: FigurePanelProps) {
+function FigurePanel({ doc, skinColor }: FigurePanelProps) {
   const dispatch = useDispatch();
-
   const containerRef = useRef<HTMLDivElement>(null);
-  const [depInfo, setDepInfo] = useState<DepInfo | null>(null);
+  const [selectedLandmarkId, setSelectedLandmarkId] = useState<string | null>(null);
+  const figureHtml = useMemo(
+    () => doc ? renderFigure(doc, { skinColor }) : null,
+    [doc, skinColor],
+  );
+  const selectedLandmark = useMemo(
+    () => doc && selectedLandmarkId
+      ? getFigureLandmarkCandidates(doc, selectedLandmarkId)
+      : null,
+    [doc, selectedLandmarkId],
+  );
 
-  const figureHtml = useMemo(() => {
-    if (!doc) return null;
-    return renderFigure(doc, { skinColor, projectionRatioEnabled });
-  }, [doc, skinColor, projectionRatioEnabled]);
-
-  // Apply guide highlight when `highlighted` changes, without re-rendering SVG
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !doc) return;
 
-    // Remove all current highlights
-    container.querySelectorAll<SVGElement>('[data-guide].is-guide-active')
-      .forEach(el => el.classList.remove('is-guide-active'));
-
-    if (!highlighted) return;
-
-    container.querySelectorAll<SVGElement>('[data-vars]')
-      .forEach(el => {
-        if (el.dataset.vars?.split(' ').includes(highlighted)) {
-          el.classList.add('is-guide-active');
-        }
-      });
-  }, [highlighted]);
-
-  // Wire guide hover/click via event delegation after HTML injection
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !figureHtml) return;
-
-    function getGuideEl(target: EventTarget | null): SVGElement | null {
-      let el = target as HTMLElement | null;
-      while (el && el !== container) {
-        if (el.dataset?.guide) return el as unknown as SVGElement;
-        el = el.parentElement;
-      }
-      return null;
+    function inspectLabel(target: EventTarget | null) {
+      const label = (target as Element | null)?.closest<SVGTextElement>('[data-landmark-id]');
+      if (!label) return;
+      setSelectedLandmarkId(label.dataset.landmarkId ?? null);
     }
 
-    function onMouseEnter(e: MouseEvent) {
-      const guide = getGuideEl(e.target);
-      if (!guide) return;
-      const variable = guide.dataset?.vars?.split(' ')[0];
-      if (variable) dispatch({ type: 'SET_HIGHLIGHT', name: variable });
-    }
-    function onMouseLeave(e: MouseEvent) {
-      const guide = getGuideEl(e.target);
-      if (guide) dispatch({ type: 'SET_HIGHLIGHT', name: null });
-    }
-    function onClick(e: MouseEvent) {
-      const guide = getGuideEl(e.target);
-      if (!guide || !doc) return;
-      const landmark = getFigureLandmark(doc, guide.dataset.guide ?? '');
-      if (!landmark) return;
-      const unit = doc.unit;
-      setDepInfo({
-        name: landmark.label,
-        wVar: landmark.widthVariable,
-        hVar: landmark.heightVariable,
-        hCalc: landmark.heightCalculation,
-        hDeps: landmark.heightDependencies,
-        wVal: landmark.widthValue != null ? `${landmark.widthValue.toFixed(2)} ${unit}` : '—',
-        hVal: landmark.heightValue != null
-            ? `${landmark.heightValue.toFixed(2)} ${unit}`
-            : '—',
-        unit,
-      });
-      const variable = landmark.relatedVariables[0];
-      if (variable) dispatch({ type: 'SET_HIGHLIGHT', name: variable });
+    function onClick(event: MouseEvent) {
+      inspectLabel(event.target);
     }
 
-    container.addEventListener('mouseenter', onMouseEnter, true);
-    container.addEventListener('mouseleave', onMouseLeave, true);
     container.addEventListener('click', onClick);
-    return () => {
-      container.removeEventListener('mouseenter', onMouseEnter, true);
-      container.removeEventListener('mouseleave', onMouseLeave, true);
-      container.removeEventListener('click', onClick);
-    };
-  }, [figureHtml, doc, dispatch]);
+    return () => container.removeEventListener('click', onClick);
+  }, [doc, figureHtml]);
+
+  function candidateVariables(candidate: ResolveCandidate): string[] {
+    if (!doc) return [];
+    const names = candidate.source.match(/@?[A-Za-z_][A-Za-z0-9_]*/g) ?? [];
+    return [...new Set(names.filter(name => doc.measurements[name]))];
+  }
+
+  function candidateTable(candidates: ResolveCandidate[]) {
+    if (!candidates.length) return <div className="figure-candidate-empty">No candidates</div>;
+    return (
+      <table className="figure-candidate-table">
+        <tbody>
+          {candidates.map((candidate, index) => (
+            <tr
+              key={`${candidate.source}-${index}`}
+              className={candidate.missing ? 'is-missing' : candidate.used ? 'is-used' : undefined}
+            >
+              <td className="figure-candidate-mark">{candidate.missing ? 'x' : candidate.used ? '*' : '-'}</td>
+              <td><code>{candidate.source}</code></td>
+              <td className="figure-candidate-value">
+                {candidate.missing ? '-' : candidate.value.toFixed(3)}
+              </td>
+              <td className="figure-candidate-kind">{candidate.confidence ?? ''}</td>
+              <td className="figure-candidate-actions">
+                {candidateVariables(candidate).map(name => (
+                  <button
+                    key={name}
+                    type="button"
+                    title={`Jump to ${name}`}
+                    onClick={() => dispatch({ type: 'SELECT_MEASUREMENT', name })}
+                  >
+                    Jump
+                  </button>
+                ))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  }
 
   return (
     <div className="figure-panel">
       <div className="panel-header">
         <span>Body figure</span>
-        <div className="figure-controls">
-          <label className="control-label">
-            <input
-              type="checkbox"
-              checked={projectionRatioEnabled}
-              onChange={() => dispatch({ type: 'TOGGLE_PROJECTION_RATIO' })}
+        <div className="skin-swatches">
+          {SKIN_PRESETS.map(preset => (
+            <button
+              key={preset.color}
+              className={`skin-swatch${skinColor === preset.color ? ' is-active' : ''}`}
+              title={preset.name}
+              style={{ background: preset.color }}
+              onClick={() => dispatch({ type: 'SET_SKIN_COLOR', color: preset.color })}
             />
-            Proj. ratio
-          </label>
-          <div className="skin-swatches">
-            {SKIN_PRESETS.map(p => (
-              <button
-                key={p.color}
-                className={`skin-swatch${skinColor === p.color ? ' is-active' : ''}`}
-                title={p.name}
-                style={{ background: p.color }}
-                onClick={() => dispatch({ type: 'SET_SKIN_COLOR', color: p.color })}
-              />
-            ))}
-            <input
-              type="color"
-              className="skin-picker"
-              value={skinColor}
-              title="Custom skin color"
-              onChange={e => dispatch({ type: 'SET_SKIN_COLOR', color: e.target.value })}
-            />
-          </div>
+          ))}
+          <input
+            type="color"
+            className="skin-picker"
+            value={skinColor}
+            title="Custom skin color"
+            onChange={event => dispatch({ type: 'SET_SKIN_COLOR', color: event.target.value })}
+          />
         </div>
       </div>
 
       {!doc && (
         <div className="figure-empty">Load a .smis file to see the body figure.</div>
-      )}
-
-      {doc && !figureHtml && (
-        <div className="figure-empty">
-          No height measurements found.<br />Add measurements like <code>height</code>, <code>height_knee</code> to see the figure.
-        </div>
       )}
 
       {figureHtml && (
@@ -169,73 +132,22 @@ function FigurePanel({ doc, highlighted, skinColor, projectionRatioEnabled }: Fi
         </div>
       )}
 
-      {depInfo && (
-        <div className="dep-panel">
-          <div className="dep-panel-header">
-            <span className="dep-panel-title">{depInfo.name}</span>
-            <button className="dep-panel-close" onClick={() => setDepInfo(null)}>✕</button>
+      {selectedLandmark && (
+        <div className="figure-candidates">
+          <div className="figure-candidates-header">
+            <strong>{selectedLandmark.id}</strong>
+            <button type="button" onClick={() => setSelectedLandmarkId(null)} aria-label="Close landmark details">x</button>
           </div>
-          <table className="dep-table">
-            <tbody>
-              {depInfo.wVar && (
-                <tr>
-                  <td className="dep-role">Width</td>
-                  <td><code>{depInfo.wVar}</code></td>
-                  <td className="dep-val">{depInfo.wVal}</td>
-                  <td>
-                    <button className="dep-jump" onClick={() => {
-                      dispatch({ type: 'SET_HIGHLIGHT', name: depInfo.wVar! });
-                    }}>↑ jump</button>
-                  </td>
-                </tr>
-              )}
-              {depInfo.hVar && (
-                <tr>
-                  <td className="dep-role">Height</td>
-                  <td><code>{depInfo.hVar}</code></td>
-                  <td className="dep-val">{depInfo.hVal}</td>
-                  <td>
-                    <button className="dep-jump" onClick={() => {
-                      dispatch({ type: 'SET_HIGHLIGHT', name: depInfo.hVar! });
-                    }}>↑ jump</button>
-                  </td>
-                </tr>
-              )}
-              {depInfo.hCalc && (
-                <>
-                  <tr>
-                    <td className="dep-role">Height</td>
-                    <td><code>{depInfo.hCalc}</code></td>
-                    <td className="dep-val">{depInfo.hVal}</td>
-                    <td />
-                  </tr>
-                  {depInfo.hDeps.map(name => (
-                    <tr key={name}>
-                      <td className="dep-role muted">uses</td>
-                      <td><code>{name}</code></td>
-                      <td className="dep-val">
-                        {doc?.measurements[name]?.resolved != null
-                          ? `${doc.measurements[name].resolved!.toFixed(2)} ${depInfo.unit}`
-                          : '—'}
-                      </td>
-                      <td>
-                        <button className="dep-jump" onClick={() => {
-                          dispatch({ type: 'SET_HIGHLIGHT', name });
-                        }}>↑ jump</button>
-                      </td>
-                    </tr>
-                  ))}
-                </>
-              )}
-              {depInfo.wVar && doc?.measurements[depInfo.wVar]?.dependencies?.length ? (
-                <tr>
-                  <td className="dep-role muted" colSpan={4}>
-                    deps: {doc!.measurements[depInfo.wVar!]!.dependencies.join(', ')}
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
+          <div className="figure-candidates-grid">
+            <section>
+              <h3>Length candidates</h3>
+              {candidateTable(selectedLandmark.lengthCandidates)}
+            </section>
+            <section>
+              <h3>Width candidates</h3>
+              {candidateTable(selectedLandmark.widthCandidates)}
+            </section>
+          </div>
         </div>
       )}
     </div>

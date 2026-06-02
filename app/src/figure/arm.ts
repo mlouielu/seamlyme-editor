@@ -2,7 +2,7 @@
  * Left/Right arm renderer — akimbo and straight poses.
  */
 import {
-  R, Landmark, PathOptions,
+  R, Landmark, PathOptions, ResolveCandidate,
   buildLandmark, crPath,
   CIRC_TO_WIDTH
 } from './common';
@@ -25,6 +25,7 @@ const CANONICAL_HW: Record<string, number> = {
 };
 
 const CANONICAL_HAND_LENGTH = 0.108;
+const RIGHT_ELBOW_FLEX_ANGLE = 10 * Math.PI / 180;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ export interface ArmLandmark extends Landmark {
   x: number;
   innerPt?: [number, number];
   outerPt?: [number, number];
+  lengthCandidates?: ResolveCandidate[];
 }
 
 export interface ArmResolved {
@@ -103,36 +105,38 @@ export function resolveLeftArmLandmarks(R: R, shoulderTipX: number, shoulderTipY
 
   return {
     landmarks: [
-      lm('shoulder', 'arm', shoulderX, shoulderY, shoulderWC(R)),
-      lm('upper-arm', 'arm', umX, umY, upperArmWC(R)),
-      lm('above-elbow', 'arm', aeX, aeY, aboveElbowWC(R)),
-      lm('elbow', 'arm', elbowX, elbowY, elbowWC(R)),
-      lm('lower-arm', 'arm', laX, laY, lowerArmWC(R)),
-      lm('wrist', 'arm', wristX, wristY, wristWC(R)),
-      lm('hand-palm', 'hand', palmX, palmY, handPalmWC(R)),
-      lm('hand-tip', 'hand', tipX, tipY, handTipWC(R)),
+      lm('shoulder',    'arm',  shoulderX, shoulderY, shoulderWC(R)),
+      lm('upper-arm',   'arm',  umX,       umY,       upperArmWC(R)),
+      lm('above-elbow', 'arm',  aeX,       aeY,       aboveElbowWC(R)),
+      lm('elbow',       'arm',  elbowX,    elbowY,    elbowWC(R)),
+      lm('lower-arm',   'arm',  laX,       laY,       lowerArmWC(R)),
+      lm('wrist',       'arm',  wristX,    wristY,    wristWC(R)),
+      lm('hand-palm',   'hand', palmX,     palmY,     handPalmWC(R)),
+      lm('hand-tip',    'hand', tipX,      tipY,      handTipWC(R)),
     ],
-    elbowIdx: 3
+    elbowIdx: 3,
   };
 }
 
 // armfoldPt: [x, y] in measurement-space, traced down torso outline from shoulder tip.
 // armAngle: degrees from vertical (0 = straight down, positive = outward, like a jumping jack).
 export function resolveRightArmLandmarks(R: R, shoulderTipX: number, shoulderTipY: number, armfoldPt: [number, number], totalHeight: number, armAngle = 0): ArmResolved {
-  // Widths
-  const W_upper = R.arm_upper_circ > 0 ? R.arm_upper_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['shoulder'] * 2;
-  const W_elbow = R.arm_elbow_circ > 0 ? R.arm_elbow_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['elbow'] * 2;
-  const W_wrist = R.arm_wrist_circ > 0 ? R.arm_wrist_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['wrist'] * 2;
-  const W_hand  = R.hand_circ > 0 ? R.hand_circ * CIRC_TO_WIDTH : totalHeight * 0.054;
-  const W_tip   = W_hand * 0.4;
-
-  // Lengths
-  const L_A    = R.shoulder_tip_to_armfold_f > 0        ? R.shoulder_tip_to_armfold_f        : totalHeight * 0.032;
-  const L_ST_D = R.arm_shoulder_tip_to_elbow > 0        ? R.arm_shoulder_tip_to_elbow        : totalHeight * 0.208;
-  const L_A_C  = R.arm_armpit_to_elbow > 0              ? R.arm_armpit_to_elbow              : (L_ST_D - L_A) * 0.95;
-  const L_D_F  = R.arm_elbow_to_wrist > 0               ? R.arm_elbow_to_wrist               : totalHeight * 0.146;
-  const L_C_E  = R.arm_elbow_to_wrist_inside > 0        ? R.arm_elbow_to_wrist_inside        : L_D_F;
-  const HL     = R.hand_length > 0 ? R.hand_length : R.hand_palm_length > 0 ? R.hand_palm_length * 1.5 : totalHeight * CANONICAL_HAND_LENGTH;
+  const directLength = (source: string, value: number): ResolveCandidate => ({
+    source,
+    value: value > 0 ? value : 0,
+    used: value > 0,
+    missing: !(value > 0),
+  });
+  const armfoldLengths = [directLength('shoulder_tip_to_armfold_f', R.shoulder_tip_to_armfold_f)];
+  const elbowLengths = [
+    directLength('arm_shoulder_tip_to_elbow', R.arm_shoulder_tip_to_elbow),
+    directLength('arm_armpit_to_elbow', R.arm_armpit_to_elbow),
+  ];
+  const forearmLengths = [
+    directLength('arm_elbow_to_wrist', R.arm_elbow_to_wrist),
+    directLength('arm_elbow_to_wrist_inside', R.arm_elbow_to_wrist_inside),
+  ];
+  const handLengths = [directLength('hand_length', R.hand_length)];
 
   // ST: shoulder tip — the anatomical pivot (arm bone connects here)
   const ST_x = shoulderTipX;
@@ -141,6 +145,15 @@ export function resolveRightArmLandmarks(R: R, shoulderTipX: number, shoulderTip
   // A: inner armfold — fixed on the torso outline, does NOT rotate with the arm
   const A_x = armfoldPt[0];
   const A_y = armfoldPt[1];
+
+  // The straight arm grows in stages as direct measurements become available.
+  // Do not fabricate missing stages from canonical proportions.
+  if (!(R.shoulder_tip_to_armfold_f > 0 && R.arm_upper_circ > 0)) {
+    return { landmarks: [], elbowIdx: -1, shoulderTip: [ST_x, ST_y], armAngle };
+  }
+
+  const W_upper = R.arm_upper_circ * CIRC_TO_WIDTH;
+  const L_A = R.shoulder_tip_to_armfold_f;
 
   // All other arm points are in the reference pose (θ=0, arm straight down)
   // and then rotated around ST by armAngle.
@@ -161,66 +174,83 @@ export function resolveRightArmLandmarks(R: R, shoulderTipX: number, shoulderTip
 
   const [B_x, B_y] = rotST(A_x + W_upper, A_y);
 
-  // Elbow: L_elbow below mid0 in the reference, then rotated around ST
-  const L_elbow = (L_A_C + L_ST_D) / 2;
-  const [C_x, C_y] = rotST(mid0_x - W_elbow / 2, mid0_y - L_elbow);
-  const [D_x, D_y] = rotST(mid0_x + W_elbow / 2, mid0_y - L_elbow);
-
-  // Wrist
-  const L_wrist = L_elbow + (L_C_E + L_D_F) / 2;
-  const [E_x, E_y] = rotST(mid0_x - W_wrist / 2, mid0_y - L_wrist);
-  const [F_x, F_y] = rotST(mid0_x + W_wrist / 2, mid0_y - L_wrist);
-
-  // Hand palm
-  const [G_x, G_y] = rotST(mid0_x - W_hand / 2, mid0_y - L_wrist - HL * 0.45);
-  const [H_x, H_y] = rotST(mid0_x + W_hand / 2, mid0_y - L_wrist - HL * 0.45);
-
-  // Hand tip
-  const [I_x, I_y] = rotST(mid0_x - W_tip / 2, mid0_y - L_wrist - HL);
-  const [J_x, J_y] = rotST(mid0_x + W_tip / 2, mid0_y - L_wrist - HL);
-
   const lerpPt = (p1: [number, number], p2: [number, number], t: number): [number, number] => [
     p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t,
   ];
 
-  function lm(id: string, section: 'arm'|'hand', innerPt: [number, number], outerPt: [number, number], wCands: any[]): ArmLandmark {
+  function lm(id: string, section: 'arm'|'hand', innerPt: [number, number], outerPt: [number, number], wCands: any[], lengths: ResolveCandidate[]): ArmLandmark {
     const centerX = (innerPt[0] + outerPt[0]) / 2;
     const centerY = (innerPt[1] + outerPt[1]) / 2;
     const dx = outerPt[0] - innerPt[0], dy = outerPt[1] - innerPt[1];
-    const base = buildLandmark(id, totalHeight, [{ source: 'computed', value: centerY }], wCands, { yRatio: 0, halfWRatio: 0.02 });
+    const base = buildLandmark(id, totalHeight, [{ source: 'computed', value: centerY }], wCands);
     base.halfW = Math.sqrt(dx * dx + dy * dy) / 2;
-    return { ...base, side: 'right', section, x: centerX, y: centerY, innerPt, outerPt };
+    return { ...base, side: 'right', section, x: centerX, y: centerY, innerPt, outerPt, lengthCandidates: lengths };
   }
 
-  return {
-    landmarks: [
-      // outerPt = B (not ST) so the path edge starts at B; ST is stored as shoulderTip for the cap
-      lm('shoulder',     'arm',  [A_x, A_y],                           [B_x, B_y],                           shoulderWC(R)),
-      lm('upper-arm',    'arm',  lerpPt([A_x,A_y],[C_x,C_y], 0.35),   lerpPt([B_x,B_y],[D_x,D_y], 0.35),   upperArmWC(R)),
-      lm('above-elbow',  'arm',  lerpPt([A_x,A_y],[C_x,C_y], 0.70),   lerpPt([B_x,B_y],[D_x,D_y], 0.70),   aboveElbowWC(R)),
-      lm('elbow',        'arm',  [C_x, C_y],                           [D_x, D_y],                           elbowWC(R)),
-      lm('lower-arm',    'arm',  lerpPt([C_x,C_y],[E_x,E_y], 0.5),    lerpPt([D_x,D_y],[F_x,F_y], 0.5),    lowerArmWC(R)),
-      lm('wrist',        'arm',  [E_x, E_y],                           [F_x, F_y],                           wristWC(R)),
-      lm('hand-palm',    'hand', [G_x, G_y],                           [H_x, H_y],                           handPalmWC(R)),
-      lm('hand-tip',     'hand', [I_x, I_y],                           [J_x, J_y],                           handTipWC(R)),
-    ],
-    elbowIdx: 3,
-    shoulderTip: [ST_x, ST_y],
-    armAngle,
-    debugPts: {
-      ST: [ST_x, ST_y],
-      A:  [A_x, A_y],
-      B:  [B_x, B_y],
-      C:  [C_x, C_y],
-      D:  [D_x, D_y],
-      E:  [E_x, E_y],
-      F:  [F_x, F_y],
-      G:  [G_x, G_y],
-      H:  [H_x, H_y],
-      I:  [I_x, I_y],
-      J:  [J_x, J_y],
-    },
-  };
+  const landmarks = [
+    lm('shoulder', 'arm', [A_x, A_y], [B_x, B_y], shoulderWC(R), armfoldLengths),
+  ];
+
+  if (!(R.arm_shoulder_tip_to_elbow > 0 && R.arm_armpit_to_elbow > 0 && R.arm_elbow_circ > 0)) {
+    return { landmarks, elbowIdx: -1, shoulderTip: [ST_x, ST_y], armAngle };
+  }
+
+  const W_elbow = R.arm_elbow_circ * CIRC_TO_WIDTH;
+  const L_elbow = (R.arm_armpit_to_elbow + R.arm_shoulder_tip_to_elbow) / 2;
+  const [C_x, C_y] = rotST(mid0_x - W_elbow / 2, mid0_y - L_elbow);
+  const [D_x, D_y] = rotST(mid0_x + W_elbow / 2, mid0_y - L_elbow);
+  landmarks.push(
+    lm('upper-arm',   'arm', lerpPt([A_x,A_y],[C_x,C_y], 0.35), lerpPt([B_x,B_y],[D_x,D_y], 0.35), upperArmWC(R), elbowLengths),
+    lm('above-elbow', 'arm', lerpPt([A_x,A_y],[C_x,C_y], 0.70), lerpPt([B_x,B_y],[D_x,D_y], 0.70), aboveElbowWC(R), elbowLengths),
+    lm('elbow',       'arm', [C_x, C_y],                         [D_x, D_y],                         elbowWC(R),      elbowLengths),
+  );
+
+  if (!(R.arm_elbow_to_wrist > 0 && R.arm_elbow_to_wrist_inside > 0 && R.arm_wrist_circ > 0)) {
+    return { landmarks, elbowIdx: 3, shoulderTip: [ST_x, ST_y], armAngle };
+  }
+
+  const W_wrist = R.arm_wrist_circ * CIRC_TO_WIDTH;
+  const forearmLength = (R.arm_elbow_to_wrist_inside + R.arm_elbow_to_wrist) / 2;
+  const forearmAngle = theta - RIGHT_ELBOW_FLEX_ANGLE;
+  const elbowMidX = (C_x + D_x) / 2;
+  const elbowMidY = (C_y + D_y) / 2;
+  const forearmCenterX = elbowMidX + Math.sin(forearmAngle) * forearmLength;
+  const forearmCenterY = elbowMidY - Math.cos(forearmAngle) * forearmLength;
+  const forearmNormalX = Math.cos(forearmAngle);
+  const forearmNormalY = Math.sin(forearmAngle);
+  const E_x = forearmCenterX - forearmNormalX * W_wrist / 2;
+  const E_y = forearmCenterY - forearmNormalY * W_wrist / 2;
+  const F_x = forearmCenterX + forearmNormalX * W_wrist / 2;
+  const F_y = forearmCenterY + forearmNormalY * W_wrist / 2;
+  landmarks.push(
+    lm('lower-arm', 'arm', lerpPt([C_x,C_y],[E_x,E_y], 0.5), lerpPt([D_x,D_y],[F_x,F_y], 0.5), lowerArmWC(R), forearmLengths),
+    lm('wrist',     'arm', [E_x, E_y],                         [F_x, F_y],                         wristWC(R),    forearmLengths),
+  );
+
+  if (!(R.hand_length > 0 && R.hand_circ > 0)) {
+    return { landmarks, elbowIdx: 3, shoulderTip: [ST_x, ST_y], armAngle };
+  }
+
+  const W_hand = R.hand_circ * CIRC_TO_WIDTH;
+  const W_tip = W_hand * 0.4;
+  const handPalmCenterX = forearmCenterX + Math.sin(forearmAngle) * R.hand_length * 0.45;
+  const handPalmCenterY = forearmCenterY - Math.cos(forearmAngle) * R.hand_length * 0.45;
+  const handTipCenterX = forearmCenterX + Math.sin(forearmAngle) * R.hand_length;
+  const handTipCenterY = forearmCenterY - Math.cos(forearmAngle) * R.hand_length;
+  const G_x = handPalmCenterX - forearmNormalX * W_hand / 2;
+  const G_y = handPalmCenterY - forearmNormalY * W_hand / 2;
+  const H_x = handPalmCenterX + forearmNormalX * W_hand / 2;
+  const H_y = handPalmCenterY + forearmNormalY * W_hand / 2;
+  const I_x = handTipCenterX - forearmNormalX * W_tip / 2;
+  const I_y = handTipCenterY - forearmNormalY * W_tip / 2;
+  const J_x = handTipCenterX + forearmNormalX * W_tip / 2;
+  const J_y = handTipCenterY + forearmNormalY * W_tip / 2;
+  landmarks.push(
+    lm('hand-palm', 'hand', [G_x, G_y], [H_x, H_y], handPalmWC(R), handLengths),
+    lm('hand-tip',  'hand', [I_x, I_y], [J_x, J_y], handTipWC(R),  handLengths),
+  );
+
+  return { landmarks, elbowIdx: 3, shoulderTip: [ST_x, ST_y], armAngle };
 }
 
 // ── Path builder ──────────────────────────────────────────────────────────────
@@ -239,6 +269,7 @@ function computeNormals(pts: [number, number][]): [number, number][] {
 }
 
 export function buildArmPath(resolved: ArmResolved, opts: ArmPathOptions): string {
+  if (resolved.landmarks.length === 0) return '';
   const { axisX, toY, scale, fill, stroke } = opts;
   const fillOpacity = opts.fillOpacity ?? 0.22, strokeWidth = opts.strokeWidth ?? 1.5, strokeOpacity = opts.strokeOpacity ?? 0.55;
 
@@ -255,6 +286,10 @@ export function buildArmPath(resolved: ArmResolved, opts: ArmPathOptions): strin
     if (l.innerPt) return [axisX + l.innerPt[0] * scale, toY(l.innerPt[1])] as [number, number];
     return [center[i][0] - dir * ns[i][0] * hws[i], center[i][1] - dir * ns[i][1] * hws[i]] as [number, number];
   }).reverse();
+
+  if (resolved.landmarks.length === 1) {
+    return `<line x1="${inner[0][0].toFixed(1)}" y1="${inner[0][1].toFixed(1)}" x2="${outer[0][0].toFixed(1)}" y2="${outer[0][1].toFixed(1)}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}"/>`;
+  }
 
   const sw = opts.capSweep ?? 1;
   let cap = '';

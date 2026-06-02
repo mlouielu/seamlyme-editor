@@ -125,7 +125,7 @@ function Header() {
 // ── Layout ────────────────────────────────────────────────────────────────────
 
 function Layout() {
-  const { doc, activeCategory, fileName, highlighted, selected, skinColor, projectionRatioEnabled } = useAppState();
+  const { doc, activeCategory, fileName, highlighted, selected, skinColor } = useAppState();
   const debugParams = new URLSearchParams(window.location.search);
   const [showDiagram, setShowDiagram] = useState(
     import.meta.env.DEV ? debugParams.get('diagram') !== '0' : true,
@@ -198,9 +198,7 @@ function Layout() {
             <Profiler id="FigurePanel" onRender={logProfile}>
               <FigurePanel
                 doc={doc}
-                highlighted={highlighted}
                 skinColor={skinColor}
-                projectionRatioEnabled={projectionRatioEnabled}
               />
             </Profiler>
           </div>

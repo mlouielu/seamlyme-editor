@@ -17,6 +17,8 @@ export interface FullBodyResolved {
   arcRatio: number;
 }
 
+const RIGHT_ARM_ANGLE = 13;
+
 // Walk the torso outline right-side polyline from the shoulder tip by `distance`,
 // returning the point in measurement-space (halfW, y) coordinates.
 export function traceOutlineFromShoulder(
@@ -58,7 +60,9 @@ export function traceOutlineFromShoulder(
 
 export function resolveFullBody(R: R, totalHeightParam?: number): FullBodyResolved {
   // 1. Determine total height
-  const totalHeight = totalHeightParam ?? R.height ?? 165;
+  const totalHeight = totalHeightParam && totalHeightParam > 0
+    ? totalHeightParam
+    : R.height > 0 ? R.height : 165;
 
   // 2. Resolve torso (this also gives us the arcRatio)
   const torso = resolveTorsoLandmarks(R, totalHeight);
@@ -80,8 +84,8 @@ export function resolveFullBody(R: R, totalHeightParam?: number): FullBodyResolv
   const L_A = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : totalHeight * 0.032;
   const armfoldPt = traceOutlineFromShoulder(torso.outline, shoulderX, shoulderY, L_A);
 
-  const leftArm = resolveLeftArmLandmarks(R, -shoulderX, shoulderY, totalHeight);
-  const rightArm = resolveRightArmLandmarks(R, shoulderX, shoulderY, armfoldPt, totalHeight);
+  const leftArm  = resolveLeftArmLandmarks(R, -shoulderX, shoulderY, totalHeight);
+  const rightArm = resolveRightArmLandmarks(R, shoulderX, shoulderY, armfoldPt, totalHeight, RIGHT_ARM_ANGLE);
 
   return {
     head,
