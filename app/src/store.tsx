@@ -41,6 +41,8 @@ export interface AppState {
   searchSnapshot: SearchSnapshot | null;
   valueFilter: ValueFilter;
   skinColor: string;
+  canUndo: boolean;
+  canRedo: boolean;
 }
 
 const initial: AppState = {
@@ -55,6 +57,8 @@ const initial: AppState = {
   searchSnapshot: null,
   valueFilter: 'all',
   skinColor: localStorage.getItem('skinColor') ?? '#f2c6a0',
+  canUndo: false,
+  canRedo: false,
 };
 
 // ── Actions ───────────────────────────────────────────────────────────────────
@@ -74,7 +78,9 @@ export type Action =
   | { type: 'SET_SEARCH'; query: string }
   | { type: 'TOGGLE_GLOBAL_SEARCH' }
   | { type: 'SET_VALUE_FILTER'; filter: ValueFilter }
-  | { type: 'SET_SKIN_COLOR'; color: string };
+  | { type: 'SET_SKIN_COLOR'; color: string }
+  | { type: 'UNDO' }
+  | { type: 'REDO' };
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
@@ -302,15 +308,77 @@ function reducer(state: AppState, action: Action): AppState {
   }
 }
 
+// ── History wrapper ───────────────────────────────────────────────────────────
+
+const DOC_MUTATING = new Set<Action['type']>([
+  'APPLY_EDIT', 'ADD_MEASUREMENT', 'DUPLICATE_MEASUREMENT', 'REMOVE_MEASUREMENT',
+]);
+const HISTORY_LIMIT = 50;
+
+interface HistoryEnvelope {
+  current: AppState;
+  past: AppState[];   // oldest first; most-recent at [past.length - 1]
+  future: AppState[]; // next redo at [0]
+}
+
+function historyReducer(envelope: HistoryEnvelope, action: Action): HistoryEnvelope {
+  if (action.type === 'UNDO') {
+    if (envelope.past.length === 0) return envelope;
+    const prev = envelope.past[envelope.past.length - 1];
+    return {
+      current: prev,
+      past: envelope.past.slice(0, -1),
+      future: [envelope.current, ...envelope.future],
+    };
+  }
+  if (action.type === 'REDO') {
+    if (envelope.future.length === 0) return envelope;
+    const [next, ...rest] = envelope.future;
+    return {
+      current: next,
+      past: [...envelope.past, envelope.current],
+      future: rest,
+    };
+  }
+
+  const next = reducer(envelope.current, action);
+  if (next === envelope.current) return envelope;
+
+  if (action.type === 'LOAD') {
+    return { current: next, past: [], future: [] };
+  }
+
+  if (DOC_MUTATING.has(action.type)) {
+    return {
+      current: next,
+      past: [...envelope.past.slice(-(HISTORY_LIMIT - 1)), envelope.current],
+      future: [],
+    };
+  }
+
+  return { ...envelope, current: next };
+}
+
 // ── Context ───────────────────────────────────────────────────────────────────
 
 const StateCtx   = createContext<AppState>(initial);
 const DispatchCtx = createContext<Dispatch<Action>>(() => {});
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [state, dispatch] = useReducer(reducer, initial);
+  const [envelope, dispatch] = useReducer(historyReducer, {
+    current: initial,
+    past: [],
+    future: [],
+  });
+
+  const stateWithHistory: AppState = {
+    ...envelope.current,
+    canUndo: envelope.past.length > 0,
+    canRedo: envelope.future.length > 0,
+  };
+
   return (
-    <StateCtx.Provider value={state}>
+    <StateCtx.Provider value={stateWithHistory}>
       <DispatchCtx.Provider value={dispatch}>
         {children}
       </DispatchCtx.Provider>

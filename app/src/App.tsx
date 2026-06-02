@@ -1,4 +1,4 @@
-import { Profiler, useCallback, useMemo, useState, type ProfilerOnRenderCallback } from 'react';
+import { Profiler, useCallback, useEffect, useMemo, useRef, useState, type ProfilerOnRenderCallback } from 'react';
 import { createDocument, parseSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
 import EditorPanel   from './components/EditorPanel';
@@ -75,12 +75,21 @@ function DropZone() {
 // ── Header ────────────────────────────────────────────────────────────────────
 
 function Header() {
-  const { doc, fileName } = useAppState();
+  const { doc, fileName, canUndo, canRedo } = useAppState();
   const dispatch = useDispatch();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
-  function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handle(e: MouseEvent) {
+      if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false);
+    }
+    document.addEventListener('mousedown', handle);
+    return () => document.removeEventListener('mousedown', handle);
+  }, [menuOpen]);
+
+  function loadFile(file: File) {
     const reader = new FileReader();
     reader.onload = ev => {
       try {
@@ -92,7 +101,13 @@ function Header() {
       }
     };
     reader.readAsText(file);
+  }
+
+  function onInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) loadFile(file);
     e.target.value = '';
+    setMenuOpen(false);
   }
 
   const present  = doc ? Object.values(doc.measurements).filter(m => m.hasValue).length : 0;
@@ -113,11 +128,65 @@ function Header() {
           <span className="pill"><strong>{resolved}</strong> resolved</span>
         </div>
       )}
-      <label className="btn">
-        {doc ? 'Load another…' : 'Load .smis…'}
-        <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
-      </label>
-      {doc && <button className="btn" onClick={() => loadNewSheet(dispatch)}>New</button>}
+      {doc && (
+        <div className="header-history">
+          <button
+            className="btn btn-icon"
+            title="Undo (Ctrl+Z)"
+            disabled={!canUndo}
+            onClick={() => dispatch({ type: 'UNDO' })}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 .49-3.31"/>
+            </svg>
+          </button>
+          <button
+            className="btn btn-icon"
+            title="Redo (Ctrl+Shift+Z)"
+            disabled={!canRedo}
+            onClick={() => dispatch({ type: 'REDO' })}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="23 4 23 10 17 10"/>
+              <path d="M20.49 15a9 9 0 1 1-.49-3.31"/>
+            </svg>
+          </button>
+        </div>
+      )}
+      <div className="header-file-actions">
+        <label className="btn">
+          {doc ? 'Load another…' : 'Load .smis…'}
+          <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
+        </label>
+        {doc && <button className="btn" onClick={() => loadNewSheet(dispatch)}>New</button>}
+      </div>
+      {doc && (
+        <div className="header-hamburger-wrap" ref={menuRef}>
+          <button
+            className="btn btn-icon"
+            aria-label="Menu"
+            onClick={() => setMenuOpen(o => !o)}
+          >
+            <svg width="16" height="13" viewBox="0 0 16 13" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="0" y1="1.5" x2="16" y2="1.5"/>
+              <line x1="0" y1="6.5" x2="16" y2="6.5"/>
+              <line x1="0" y1="11.5" x2="16" y2="11.5"/>
+            </svg>
+          </button>
+          {menuOpen && (
+            <div className="header-dropdown">
+              <label className="header-dropdown-item">
+                Load another…
+                <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
+              </label>
+              <button className="header-dropdown-item" onClick={() => { loadNewSheet(dispatch); setMenuOpen(false); }}>
+                New
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </header>
   );
 }
@@ -126,7 +195,25 @@ function Header() {
 
 function Layout() {
   const { doc, activeCategory, fileName, highlighted, selected, skinColor } = useAppState();
+  const dispatch = useDispatch();
   const debugParams = new URLSearchParams(window.location.search);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!e.ctrlKey && !e.metaKey) return;
+      const tag = (e.target as HTMLElement).tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return;
+      if (e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        dispatch({ type: 'UNDO' });
+      } else if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+        e.preventDefault();
+        dispatch({ type: 'REDO' });
+      }
+    }
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [dispatch]);
   const [showDiagram, setShowDiagram] = useState(
     import.meta.env.DEV ? debugParams.get('diagram') !== '0' : true,
   );
