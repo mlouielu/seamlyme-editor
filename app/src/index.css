@@ -483,6 +483,27 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .measurement-editor-error { margin-top: 4px; font-size: 10px; }
 .measurement-editor-error { color: #dc2626; }
 
+/* ── Mobile top panel (diagram / figure tabs) ────────────────────────────── */
+.workspace-top-panel { display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.workspace-figure-mobile { flex: 1 1 0; min-height: 0; display: flex; }
+.mobile-view-tabs {
+  display: none;
+  flex-shrink: 0; background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.mobile-tab {
+  flex: 1; padding: 7px 12px; border: 0; border-bottom: 2px solid transparent;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-family: inherit; font-size: 12px; font-weight: 600;
+  transition: color .12s, border-color .12s;
+}
+.mobile-tab:hover { color: var(--text); }
+.mobile-tab.is-active { color: var(--accent); border-bottom-color: var(--accent); }
+
+@media (max-width: 700px) {
+  .mobile-view-tabs { display: flex; }
+  .workspace-top-panel .workspace-diagram { flex: 1 1 0; min-height: 0; }
+}
+
 /* ── Diagram panel ───────────────────────────────────────────────────────── */
 .diagram-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #f3f3f3; height: 100%; }
 .diagram-viewer { flex: 1; overflow: hidden; position: relative; }
@@ -559,7 +580,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   .workspace-split { flex-direction: column; }
   .workspace-left {
     display: grid;
-    grid-template-rows: minmax(0, 36fr) auto minmax(0, 24fr) minmax(180px, 35fr);
+    grid-template-rows: minmax(0, 46fr) auto minmax(0, 15fr) minmax(160px, 20fr);
     flex: 1 1 auto;
     min-height: 0;
     height: 100%;
@@ -588,34 +609,42 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   .measurement-list-calculated-line.is-formula:not(.is-secondary) .measurement-list-calculated-prefix::before { content: "\0192";}
   .measurement-editor-panel {
     display: flex; flex-direction: column;
-    min-height: 180px; max-height: none; overflow: hidden;
+    min-height: 160px; max-height: none; overflow: visible; position: relative;
   }
   .measurement-editor-actions { padding-inline: 6px; }
   .measurement-editor-actions button { padding-inline: 5px; }
   .measurement-editor {
     display: grid;
-    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    grid-template-rows: auto auto auto;
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
     overflow: hidden;
+    position: relative;
   }
-  .measurement-description-field textarea {
-    min-height: 32px; height: 100%; resize: none;
-  }
+  /* When expanded: section fills the entire .measurement-editor */
   .measurement-editor-dependency-section.is-expanded {
-    display: flex; flex-direction: column; min-height: 0;
+    position: absolute;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border-top: 1px solid var(--border);
   }
-  .measurement-editor-dependencies {
-    flex: 1 1 auto;
-    align-self: stretch;
-    height: auto;
-    min-height: 0;
-    max-height: none;
-    overflow-y: auto;
-    margin-top: 6px;
+  /* Content fills top, toggle stays pinned at bottom */
+  .measurement-editor-dependency-section.is-expanded .measurement-editor-dependencies {
+    order: 1; flex: 1 1 0; min-height: 0;
+    height: auto; max-height: none;
+    overflow-y: auto; margin-top: 0; padding: 6px;
+  }
+  .measurement-editor-dependency-section.is-expanded .measurement-editor-dependency-toggle {
+    order: 2; flex-shrink: 0;
+    border-top: 1px solid var(--border); border-radius: 0;
+    border-left: 0; border-right: 0; border-bottom: 0;
   }
   .measurement-name-field { display: none; }
+  .measurement-description-field { display: none; }
   .identity-row, .calculation-row { grid-template-columns: 1fr; }
   .calculation-arrow { display: none; }
 }

@@ -191,11 +191,26 @@ function Header() {
   );
 }
 
+// ── Mobile breakpoint hook ────────────────────────────────────────────────────
+
+function useIsMobile() {
+  const [is, setIs] = useState(() => window.matchMedia('(max-width: 700px)').matches);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 700px)');
+    const h = (e: MediaQueryListEvent) => setIs(e.matches);
+    mq.addEventListener('change', h);
+    return () => mq.removeEventListener('change', h);
+  }, []);
+  return is;
+}
+
 // ── Layout ────────────────────────────────────────────────────────────────────
 
 function Layout() {
   const { doc, activeCategory, fileName, highlighted, selected, skinColor } = useAppState();
   const dispatch = useDispatch();
+  const isMobile = useIsMobile();
+  const [mobileTab, setMobileTab] = useState<'diagram' | 'figure'>('diagram');
   const debugParams = new URLSearchParams(window.location.search);
 
   useEffect(() => {
@@ -263,13 +278,44 @@ function Layout() {
       )}
       <div className="workspace-split">
         <div className="workspace-left">
-          {showDiagram && (
-            <div className="workspace-diagram">
-              <Profiler id="DiagramPanel" onRender={logProfile}>
-                <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
-                  selected={selected} missingVariables={missingVariables} />
-              </Profiler>
+          {isMobile ? (
+            <div className="workspace-top-panel">
+              <div className="mobile-view-tabs">
+                <button
+                  className={`mobile-tab${mobileTab === 'diagram' ? ' is-active' : ''}`}
+                  onClick={() => setMobileTab('diagram')}
+                >Diagram</button>
+                <button
+                  className={`mobile-tab${mobileTab === 'figure' ? ' is-active' : ''}`}
+                  onClick={() => setMobileTab('figure')}
+                >Figure</button>
+              </div>
+              {mobileTab === 'diagram' ? (
+                showDiagram && (
+                  <div className="workspace-diagram">
+                    <Profiler id="DiagramPanel" onRender={logProfile}>
+                      <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
+                        selected={selected} missingVariables={missingVariables} />
+                    </Profiler>
+                  </div>
+                )
+              ) : (
+                <div className="workspace-figure-mobile">
+                  <Profiler id="FigurePanel" onRender={logProfile}>
+                    <FigurePanel doc={doc} skinColor={skinColor} />
+                  </Profiler>
+                </div>
+              )}
             </div>
+          ) : (
+            showDiagram && (
+              <div className="workspace-diagram">
+                <Profiler id="DiagramPanel" onRender={logProfile}>
+                  <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
+                    selected={selected} missingVariables={missingVariables} />
+                </Profiler>
+              </div>
+            )
           )}
           <CategorySelector placement="desktop" />
           <CategorySelector placement="mobile" />
@@ -280,7 +326,7 @@ function Layout() {
             <MeasurementEditorPanel />
           </Profiler>
         </div>
-        {showFigure && (
+        {!isMobile && showFigure && (
           <div className="workspace-right">
             <Profiler id="FigurePanel" onRender={logProfile}>
               <FigurePanel
