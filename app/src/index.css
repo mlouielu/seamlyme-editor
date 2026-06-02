@@ -265,22 +265,62 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   min-width: 0; padding: 8px 7px; border: 0; background: transparent;
   color: var(--text); text-align: left; cursor: pointer; font-family: inherit;
 }
+.measurement-list-actions {
+    display: flex; align-items: center; gap: 3px; padding-right: 5px; min-width: 2em;
+}
 .measurement-list-jump {
-  align-self: center; margin-right: 5px; padding: 3px 5px;
+  align-self: center; padding: 3px 5px;
   border: 1px solid #c4b5fd; border-radius: 5px; background: var(--surface);
   color: var(--accent); cursor: pointer; font-family: inherit; font-size: 10px; font-weight: 800;
   white-space: nowrap;
 }
 .measurement-list-jump:hover { background: var(--accent-l); }
+.measurement-list-clear {
+  display: flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; padding: 0; border: 0; border-radius: 4px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  opacity: 0; pointer-events: none; transition: opacity 0.1s;
+}
+.measurement-list-clear svg {
+  width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round;
+}
+.measurement-list-clear:hover { color: #dc2626; background: #fee2e2; }
+.measurement-list-row:hover .measurement-list-clear,
+.measurement-list-row.is-selected .measurement-list-clear,
+.measurement-list-row.is-highlighted .measurement-list-clear {
+  opacity: 1; pointer-events: auto;
+}
 .measurement-list-name { min-width: 0; }
 .measurement-list-name strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .measurement-list-name code { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 3px; color: var(--muted); font-size: 11px; }
 .measurement-list-calculated {
-  width: 150px; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  width: 140px; max-width: 260px; overflow: hidden; text-overflow: ellipsis;
   color: #0369a1; font-family: var(--mono); font-size: 12px; font-weight: 700; text-align: left; white-space: nowrap;
 }
 .measurement-list-calculated-line {
-  display: grid; grid-template-columns: 10px 62px minmax(0, 1fr); gap: 4px; align-items: baseline;
+  display: grid; grid-template-columns: 3em 62px minmax(0, 1fr); gap: 4px; align-items: baseline;
+}
+
+/* 1. Make the parent a flex container */
+.measurement-list-calculated-line.is-formula:not(.is-secondary) .measurement-list-calculated-prefix {
+  display: flex;
+  align-items: center; /* Centers items vertically */
+}
+
+.measurement-list-calculated-prefix {
+  display: inline-block;
+  min-width: 45px; /* Adjust this so it is wide enough to fit 'f(x) =' */
+  text-align: right;
+  margin-right: 8px; /* Optional: adds consistent space before the numbers */
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* 2. Style the ::before */
+.measurement-list-calculated-line.is-formula:not(.is-secondary) .measurement-list-calculated-prefix::before {
+  font-style: italic;
+  content: '\0192(x) ';
+  margin-right: auto; /* Pushes the rest of the text to the right, keeping f(x) on the left */
 }
 .measurement-list-calculated-line.is-secondary { color: var(--muted); font-weight: 500; }
 .measurement-list-calculated-number {
@@ -522,6 +562,8 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   .measurement-list-name strong { font-size: 11px; }
   .measurement-list-calculated { width: 112px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
   .measurement-list-calculated-line { grid-template-columns: 8px 53px minmax(0, 1fr); gap: 3px; }
+  .measurement-list-calculated-prefix { min-width:1.5em; }
+  .measurement-list-calculated-line.is-formula:not(.is-secondary) .measurement-list-calculated-prefix::before { content: "\0192";}
   .measurement-editor-panel {
     display: flex; flex-direction: column;
     min-height: 180px; max-height: none; overflow: hidden;

@@ -28,6 +28,8 @@ interface MeasurementEditorProps {
   unit: string;
   dependents: string[];
   placeholderZero: boolean;
+  autoFocusFormula?: boolean;
+  onFocusDone?: () => void;
   nameExists: (name: string) => boolean;
   onApply: (oldName: string, newName: string, value: string, description: string) => void;
   onSelectVariable: (name: string) => void;
@@ -95,7 +97,8 @@ function DependencyTree({ names, measurements, onSelect }: DependencyTreeProps) 
 }
 
 function MeasurementEditor({
-  measurement, measurements, unit, dependents, placeholderZero, nameExists, onApply, onSelectVariable,
+  measurement, measurements, unit, dependents, placeholderZero, autoFocusFormula, onFocusDone,
+  nameExists, onApply, onSelectVariable,
 }: MeasurementEditorProps) {
   const showZeroPlaceholder = placeholderZero && measurement.raw === '0';
   const [variable, setVariable] = useState(measurement.name);
@@ -105,7 +108,15 @@ function MeasurementEditor({
   const [dependenciesExpanded, setDependenciesExpanded] = useState(false);
   const [error, setError] = useState('');
   const timerRef = useRef<number | null>(null);
+  const formulaInputRef = useRef<HTMLInputElement>(null);
   const canRename = !idToCategory(measurement.id);
+
+  useEffect(() => {
+    if (autoFocusFormula) {
+      formulaInputRef.current?.focus();
+      onFocusDone?.();
+    }
+  }, [autoFocusFormula, onFocusDone]);
 
   useEffect(() => {
     setVariable(measurement.name);
@@ -194,7 +205,7 @@ function MeasurementEditor({
       <div className="measurement-editor-row calculation-row">
         <label className="formula-field">
           <span>Formula or value</span>
-          <input value={value} placeholder={showZeroPlaceholder ? '0' : undefined}
+          <input ref={formulaInputRef} value={value} placeholder={showZeroPlaceholder ? '0' : undefined}
             onChange={e => {
               setValueEdited(true);
               setValue(e.target.value);
@@ -246,6 +257,7 @@ function MeasurementEditor({
 function MeasurementEditorPanel() {
   const { doc, fileName, globalSearch, searchQuery, searchSnapshot, selected } = useAppState();
   const dispatch = useDispatch();
+  const [pendingFocusFormula, setPendingFocusFormula] = useState(false);
   const measurement = doc && selected ? doc.measurements[selected] : null;
   const canRemove = measurement ? !idToCategory(measurement.id) : false;
   const dependents = doc && measurement
@@ -285,7 +297,7 @@ function MeasurementEditorPanel() {
               Search
             </button>
           )}
-          <button type="button" onClick={() => dispatch({ type: 'ADD_MEASUREMENT' })}>
+          <button type="button" onClick={() => { dispatch({ type: 'ADD_MEASUREMENT' }); setPendingFocusFormula(true); }}>
             <span aria-hidden="true">+</span> Add
           </button>
           <button type="button" disabled={!measurement}
@@ -300,7 +312,6 @@ function MeasurementEditorPanel() {
             title={measurement && !canRemove ? 'Pre-defined measurements cannot be removed' : undefined}
             onClick={() => {
               if (!measurement || !canRemove) return;
-              if (!window.confirm(`Remove ${measurement.name}? Formulas that use it may stop resolving.`)) return;
               dispatch({ type: 'REMOVE_MEASUREMENT', name: measurement.name });
             }}>
             <span aria-hidden="true">-</span> Remove
@@ -310,6 +321,7 @@ function MeasurementEditorPanel() {
       {doc && measurement ? (
         <MeasurementEditor measurement={measurement} measurements={doc.measurements}
           unit={doc.unit} dependents={dependents} placeholderZero={fileName === 'new'}
+          autoFocusFormula={pendingFocusFormula} onFocusDone={() => setPendingFocusFormula(false)}
           nameExists={name => Boolean(doc.measurements[name])}
           onApply={(oldName, newName, value, description) => {
             dispatch({ type: 'APPLY_EDIT', oldName, newName, value, description });

@@ -26,10 +26,12 @@ function CalculatedValue({
   if (!measurement.hasValue || (placeholderZero && measurement.raw === '0')) return <>Not set</>;
   if (measurement.error) return <>{measurement.error}</>;
 
+  const isFormula = measurement.dependencies.length > 0;
   const cm = measurement.resolved != null ? toCm(measurement.resolved, unit) : null;
+
   return (
     <>
-      <span className="measurement-list-calculated-line">
+      <span className={`measurement-list-calculated-line${isFormula ? ' is-formula' : ''}`}>
         <span className="measurement-list-calculated-prefix">=</span>
         <span className="measurement-list-calculated-number">{fmtVal(measurement.resolved)}</span>
         <span>{unit}</span>
@@ -135,15 +137,26 @@ function EditorPanel() {
                 <CalculatedValue measurement={m} unit={doc.unit} placeholderZero={fileName === 'new'} />
               </span>
             </button>
-            {searchQuery && (
-              <button type="button" className="measurement-list-jump"
-                title={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
-                aria-label={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
-                onClick={() => dispatch({ type: 'JUMP_FROM_SEARCH', name: m.name })}>
-                <span aria-hidden="true">↗</span>
-                {idToCategory(m.id) ?? '*'}
-              </button>
-            )}
+            <div className="measurement-list-actions">
+              {m.hasValue && m.dependencies.length === 0 && !(fileName === 'new' && m.raw === '0') && (
+                <button type="button" className="measurement-list-clear"
+                  title="Clear value"
+                  onClick={() => dispatch({ type: 'APPLY_EDIT', oldName: m.name, newName: m.name, value: '', description: m.desc })}>
+                  <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/>
+                  </svg>
+                </button>
+              )}
+              {searchQuery && (
+                <button type="button" className="measurement-list-jump"
+                  title={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
+                  aria-label={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
+                  onClick={() => dispatch({ type: 'JUMP_FROM_SEARCH', name: m.name })}>
+                  <span aria-hidden="true">↗</span>
+                  {idToCategory(m.id) ?? '*'}
+                </button>
+              )}
+            </div>
           </div>
           );
         })}
