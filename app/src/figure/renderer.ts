@@ -6,11 +6,11 @@
  * and presentation colors.
  */
 import type { SeamlyDocument } from '@seamlyme/core';
-import type { Landmark, PathOptions, R, ResolveCandidate, WidthConfidence } from './common';
+import type { Landmark, PathOptions, R, ResolveCandidate } from './common';
 import type { ArmLandmark } from './arm';
 import { buildArmPath } from './arm';
 import { resolveFullBody } from './factory';
-import { buildHeadPath } from './head';
+import { buildHeadPath, buildNeckPath } from './head';
 import { buildFootPaths, buildHipPath, buildLegPaths } from './lower-body';
 import {
   buildBustpointMark,
@@ -21,6 +21,8 @@ import {
 
 export interface RenderOptions {
   skinColor: string;
+  showGuideTicks?: boolean;
+  showGuideLabels?: boolean;
 }
 
 export interface FigureLandmarkCandidates {
@@ -75,18 +77,29 @@ export function getFigureLandmarkCandidates(doc: SeamlyDocument, id: string): Fi
   } : null;
 }
 
-function guideColor(confidence: WidthConfidence): string {
-  switch (confidence) {
-    case 'direct': return '#16a34a';
-    case 'arc': return '#ca8a04';
-    case 'circ': return '#ea580c';
-    case 'derived': return '#9333ea';
-    case 'canonical': return '#64748b';
-  }
+const GUIDE_COLORS = {
+  head: '#a6cee3',
+  neck: '#1f78b4',
+  leftArm: '#b2df8a',
+  leftHand: '#33a02c',
+  rightArm: '#fb9a99',
+  rightHand: '#e31a1c',
+  torso: '#fdbf6f',
+  hip: '#ff7f00',
+  legs: '#cab2d6',
+  foot: '#6a3d9a',
+};
+
+function bodyGuideColor(id: string): string {
+  if (id === 'crown' || id === 'head-mid' || id === 'chin') return GUIDE_COLORS.head;
+  if (id.startsWith('neck-')) return GUIDE_COLORS.neck;
+  if (id === 'highhip' || id === 'hip' || id === 'crotch') return GUIDE_COLORS.hip;
+  return GUIDE_COLORS.torso;
 }
 
-function line(x1: number, y1: number, x2: number, y2: number, color: string): string {
-  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="1.1" stroke-opacity="0.7" stroke-dasharray="3 2"/>`;
+function line(x1: number, y1: number, x2: number, y2: number, color: string, visible = true): string {
+  if (!visible) return '';
+  return `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${color}" stroke-width="1.1" stroke-dasharray="3 2"/>`;
 }
 
 function escXml(value: string): string {
@@ -120,6 +133,8 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   const figure = resolveFullBody(values);
   const skinColor = opts.skinColor || '#f2c6a0';
   const strokeColor = '#5f3a2d';
+  const showGuideTicks = opts.showGuideTicks ?? true;
+  const showGuideLabels = opts.showGuideLabels ?? true;
 
   const pad = 20;
   const bodyHeight = 500;
@@ -138,6 +153,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   };
 
   const paths: string[] = [];
+  paths.push(`<line x1="${axisX}" y1="${pad}" x2="${axisX}" y2="${pad + bodyHeight}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>`);
 
   paths.push(buildHipPath(figure.lowerBody.hip, pathOpts));
   const crotch = figure.lowerBody.hip.find(landmark => landmark.id === 'crotch') ?? null;
@@ -149,6 +165,8 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
 
   paths.push(buildArmPath(figure.leftArm, { ...pathOpts, capSweep: 1 }));
   paths.push(buildArmPath(figure.rightArm, { ...pathOpts, flipNormals: true, capSweep: 0 }));
+  const neckSide = figure.torso.outline.find(landmark => landmark.id === 'neck-side');
+  if (neckSide) paths.push(buildNeckPath(figure.head, neckSide, pathOpts));
   paths.push(buildHeadPath(figure.head, pathOpts));
   paths.push(buildTorsoPath(figure.torso.outline, pathOpts));
 
@@ -193,13 +211,13 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
     const halfWidth = landmark.halfW * scale;
     const x1 = axisX - halfWidth;
     const x2 = axisX + halfWidth;
-    const color = guideColor(landmark.widthConfidence);
+    const color = bodyGuideColor(landmark.id);
     addGuide(
       landmark.id,
       'right',
       x2,
       y,
-      line(x1, y, x2, y, color),
+      line(x1, y, x2, y, color, showGuideTicks),
       color,
       [x1, x2],
       inlineBodyLabels.has(landmark.id) ? 'inline' : 'right',
@@ -221,13 +239,13 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
     const leftX2 = axisX - legOffset + halfWidth;
     const rightX1 = axisX + legOffset - halfWidth;
     const rightX2 = axisX + legOffset + halfWidth;
-    const color = guideColor(landmark.widthConfidence);
+    const color = GUIDE_COLORS.legs;
     addGuide(
       landmark.id,
       'left',
       leftX1,
       y,
-      line(leftX1, y, leftX2, y, color) + line(rightX1, y, rightX2, y, color),
+      line(leftX1, y, leftX2, y, color, showGuideTicks) + line(rightX1, y, rightX2, y, color, showGuideTicks),
       color,
       [leftX1, leftX2, rightX1, rightX2],
     );
@@ -238,13 +256,13 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
     const y = toY(0);
     const leftX = axisX - legOffset - footReach;
     const rightX = axisX + legOffset + footReach;
-    const color = guideColor(figure.lowerBody.foot.widthConfidence);
+    const color = GUIDE_COLORS.foot;
     addGuide(
       'foot',
       'right',
       rightX,
       y,
-      line(axisX - legOffset, y, leftX, y, color) + line(axisX + legOffset, y, rightX, y, color),
+      line(axisX - legOffset, y, leftX, y, color, showGuideTicks) + line(axisX + legOffset, y, rightX, y, color, showGuideTicks),
       color,
       [leftX, rightX],
     );
@@ -267,14 +285,16 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
       const y1 = landmark.innerPt ? toY(landmark.innerPt[1]) : centerY - normalY * halfWidth;
       const x2 = landmark.outerPt ? axisX + landmark.outerPt[0] * scale : centerX + normalX * halfWidth;
       const y2 = landmark.outerPt ? toY(landmark.outerPt[1]) : centerY + normalY * halfWidth;
-      const color = guideColor(landmark.widthConfidence);
+      const color = side === 'left'
+        ? landmark.section === 'hand' ? GUIDE_COLORS.leftHand : GUIDE_COLORS.leftArm
+        : landmark.section === 'hand' ? GUIDE_COLORS.rightHand : GUIDE_COLORS.rightArm;
       const anchorX = side === 'left' ? Math.min(x1, x2) : Math.max(x1, x2);
       addGuide(
         `${side === 'left' ? 'l' : 'r'}-${landmark.id}`,
         side,
         anchorX,
         centerY,
-        line(x1, y1, x2, y2, color),
+        line(x1, y1, x2, y2, color, showGuideTicks),
         color,
         [x1, x2],
         side,
@@ -302,14 +322,16 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
 
   guides.forEach(guide => {
     if (guide.lane === 'inline') {
+      if (!showGuideLabels) return;
       paths.push(`<g class="figure-guide">${guide.segments}<text class="figure-guide-label" data-landmark-id="${escXml(guide.label)}" x="${axisX.toFixed(1)}" y="${(guide.anchorY - 3).toFixed(1)}" fill="${guide.color}" stroke="#ffffff" stroke-width="2.5" paint-order="stroke" font-size="8" font-family="ui-monospace, monospace" text-anchor="middle">${escXml(guide.label)}</text></g>`);
       return;
     }
+    if (!showGuideLabels) return;
     const labelY = labels.get(guide) ?? guide.anchorY;
     const labelX = guide.side === 'left' ? leftLabelX : rightLabelX;
     const elbowX = guide.side === 'left' ? labelX + 8 : labelX - 8;
     const textAnchor = guide.side === 'left' ? 'end' : 'start';
-    paths.push(`<g class="figure-guide">${guide.segments}<polyline points="${guide.anchorX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${labelY.toFixed(1)} ${labelX.toFixed(1)},${labelY.toFixed(1)}" fill="none" stroke="${guide.color}" stroke-width="0.8" stroke-opacity="0.55"/><text class="figure-guide-label" data-landmark-id="${escXml(guide.label)}" x="${labelX.toFixed(1)}" y="${(labelY + 3).toFixed(1)}" fill="${guide.color}" font-size="8" font-family="ui-monospace, monospace" text-anchor="${textAnchor}">${escXml(guide.label)}</text></g>`);
+    paths.push(`<g class="figure-guide">${guide.segments}<polyline points="${guide.anchorX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${labelY.toFixed(1)} ${labelX.toFixed(1)},${labelY.toFixed(1)}" fill="none" stroke="${guide.color}" stroke-width="0.8"/><text class="figure-guide-label" data-landmark-id="${escXml(guide.label)}" x="${labelX.toFixed(1)}" y="${(labelY + 3).toFixed(1)}" fill="${guide.color}" font-size="8" font-family="ui-monospace, monospace" text-anchor="${textAnchor}">${escXml(guide.label)}</text></g>`);
   });
 
   const viewMinX = leftLabelX - labelWidth;

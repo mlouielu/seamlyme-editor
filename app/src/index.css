@@ -438,6 +438,12 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .figure-panel { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
 
 .figure-header-actions { display: flex; align-items: center; gap: 8px; }
+.figure-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 10px; font-weight: 600; color: var(--muted);
+  text-transform: none; letter-spacing: 0;
+}
+.figure-toggle input { margin: 0; }
 .figure-copy-button {
   padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px;
   background: var(--surface); color: var(--accent); cursor: pointer;

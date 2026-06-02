@@ -20,8 +20,7 @@
 
     /* landmark hit target */
     .lm-hit { cursor: pointer; }
-    .lm-hit:hover line { stroke-opacity: 1 !important; }
-    .lm-hit.selected line { stroke-opacity: 1 !important; stroke-width: 2 !important; }
+    .lm-hit.selected line { stroke-width: 2 !important; }
     .lm-hit.selected text { font-weight: 800; }
 
     /* detail panel */
@@ -82,7 +81,7 @@
 import { resolveTorsoLandmarks, buildTorsoPath, buildNeckBackLines, buildNecklineCurve, buildBustpointMark } from './torso.ts';
 import { resolveLowerBodyLandmarks, buildHipPath, buildLegPaths, buildFootPaths } from './lower-body.ts';
 import { resolveLeftArmLandmarks, resolveRightArmLandmarks, buildArmPath } from './arm.ts';
-import { resolveHeadLandmarks, buildHeadPath } from './head.ts';
+import { resolveHeadLandmarks, buildHeadPath, buildNeckPath } from './head.ts';
 import { traceOutlinePathFromShoulder } from './factory.ts';
 import { parseSmis } from '@seamlyme/core';
 
@@ -181,7 +180,24 @@ function clrFor(c) {
   return c === 'direct' ? '#4ade80' : c === 'arc' ? '#facc15' : c === 'circ' ? '#fb923c' : c === 'derived' ? '#c084fc' : '#52525b';
 }
 
-function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH) {
+const GUIDE_COLORS = {
+  head: '#a6cee3', neck: '#1f78b4', leftArm: '#b2df8a', leftHand: '#33a02c',
+  rightArm: '#fb9a99', rightHand: '#e31a1c', torso: '#fdbf6f', hip: '#ff7f00',
+  legs: '#cab2d6', foot: '#6a3d9a',
+};
+
+function bodyGuideColor(id) {
+  if (id === 'crown' || id === 'head-mid' || id === 'chin') return GUIDE_COLORS.head;
+  if (id.startsWith('neck-')) return GUIDE_COLORS.neck;
+  if (id === 'highhip' || id === 'hip' || id === 'crotch') return GUIDE_COLORS.hip;
+  return GUIDE_COLORS.torso;
+}
+
+function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH, opts = {}) {
+  const hideLabel = opts.hideLabel ?? false;
+  const hideGuideline = opts.hideGuideline ?? false;
+  const showGuides = !hideGuideline;
+  const showLabels = showGuides && !hideLabel;
   const { outline, interior } = resolved;
   const neckLandmarks = [
     resolved.neckBack,
@@ -211,6 +227,8 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const legOpts  = { axisX: AXIS_X, toY, scale, fill: '#a0c4f2', stroke: '#3a5a8a', fillOpacity: 0.18, strokeOpacity: 0.6 };
 
   const headOpts     = { axisX: AXIS_X, toY, scale, fill: '#f2c6a0', stroke: '#8a5a44', fillOpacity: 0.18, strokeOpacity: 0.6 };
+  const neckSideLm   = outline.find(l => l.id === 'neck-side');
+  const neckSvg      = neckSideLm ? buildNeckPath(headResolved, neckSideLm, headOpts) : '';
   const headSvg      = buildHeadPath(headResolved, headOpts);
   const armSvg      = buildArmPath(armResolved, armOpts);
   const rightArmSvg = buildArmPath(rightArmResolved, rightArmOpts);
@@ -237,26 +255,26 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
     const y  = toY(l.y).toFixed(1);
     const hw = ((l.halfW ?? 0) * scale).toFixed(1);
     return `<g class="lm-hit" data-id="neck-back">
-      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
-            stroke="#71717a" stroke-width="1" stroke-opacity="0.5" stroke-dasharray="2 3"/>
-      <circle cx="${AXIS_X}" cy="${y}" r="2" fill="#71717a" opacity="0.6"/>
-      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="#71717a">neck-back</text>
+      ${showGuides ? `<line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="${GUIDE_COLORS.neck}" stroke-width="1" stroke-dasharray="2 3"/>` : ''}
+      ${showGuides ? `<circle cx="${AXIS_X}" cy="${y}" r="2" fill="${GUIDE_COLORS.neck}"/>` : ''}
+      ${showLabels ? `<text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${GUIDE_COLORS.neck}">neck-back</text>` : ''}
     </g>`;
   })() : '';
 
   const bustpointSvg = interior
-    .map(l => buildBustpointMark(l, pathOpts))
+    .map(l => showLabels ? buildBustpointMark(l, pathOpts) : '')
     .join('');
 
   const guideLines = outline.map(l => {
     const y  = toY(l.y).toFixed(1);
     const hw = ((l.halfW ?? 0) * scale).toFixed(1);
-    const clr = clrFor(l.widthConfidence);
+    const clr = bodyGuideColor(l.id);
     return `<g class="lm-hit" data-id="${l.id}">
-      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
-            stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
-      <circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}" opacity="0.7"/>
-      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+      ${showGuides ? `<line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="${clr}" stroke-width="1.2" stroke-dasharray="3 2"/>` : ''}
+      ${showGuides ? `<circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}"/>` : ''}
+      ${showLabels ? `<text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>` : ''}
     </g>`;
   }).join('');
 
@@ -266,7 +284,7 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
     const hw = ((l.halfW ?? 0) * scale).toFixed(1);
     return `<g class="lm-hit" data-id="${l.id}">
       <rect x="${AXIS_X - +hw - 4}" y="${+y - 6}" width="${+hw * 2 + 8}" height="12" fill="transparent"/>
-      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="#fc8d62">${l.id}</text>
+      ${showLabels ? `<text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${GUIDE_COLORS.torso}">${l.id}</text>` : ''}
     </g>`;
   }).join('');
 
@@ -274,12 +292,12 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const hipGuideLines = lowerResolved.hip.map(l => {
     const y  = toY(l.y).toFixed(1);
     const hw = ((l.halfW ?? 0) * scale).toFixed(1);
-    const clr = clrFor(l.widthConfidence);
+    const clr = bodyGuideColor(l.id);
     return `<g class="lm-hit" data-id="${l.id}">
-      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
-            stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
-      <circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}" opacity="0.7"/>
-      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+      ${showGuides ? `<line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="${clr}" stroke-width="1.2" stroke-dasharray="3 2"/>` : ''}
+      ${showGuides ? `<circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}"/>` : ''}
+      ${showLabels ? `<text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>` : ''}
     </g>`;
   }).join('');
 
@@ -288,7 +306,7 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const legGuideLines = lowerResolved.leg.map(l => {
     const y   = toY(l.y).toFixed(1);
     const hw  = ((l.halfW ?? 0) * scale);
-    const clr = clrFor(l.widthConfidence);
+    const clr = GUIDE_COLORS.legs;
     // right leg tick
     const rlx = (AXIS_X + ox - hw).toFixed(1);
     const rrx = (AXIS_X + ox + hw).toFixed(1);
@@ -296,11 +314,11 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
     const llx = (AXIS_X - ox - hw).toFixed(1);
     const lrx = (AXIS_X - ox + hw).toFixed(1);
     return `<g class="lm-hit" data-id="${l.id}">
-      <line x1="${llx}" y1="${y}" x2="${lrx}" y2="${y}" stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
-      <line x1="${rlx}" y1="${y}" x2="${rrx}" y2="${y}" stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
-      <circle cx="${(AXIS_X + ox).toFixed(1)}" cy="${y}" r="2" fill="${clr}" opacity="0.7"/>
-      <circle cx="${(AXIS_X - ox).toFixed(1)}" cy="${y}" r="2" fill="${clr}" opacity="0.7"/>
-      <text x="${+rrx + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+      ${showGuides ? `<line x1="${llx}" y1="${y}" x2="${lrx}" y2="${y}" stroke="${clr}" stroke-width="1.2" stroke-dasharray="3 2"/>` : ''}
+      ${showGuides ? `<line x1="${rlx}" y1="${y}" x2="${rrx}" y2="${y}" stroke="${clr}" stroke-width="1.2" stroke-dasharray="3 2"/>` : ''}
+      ${showGuides ? `<circle cx="${(AXIS_X + ox).toFixed(1)}" cy="${y}" r="2" fill="${clr}"/>` : ''}
+      ${showGuides ? `<circle cx="${(AXIS_X - ox).toFixed(1)}" cy="${y}" r="2" fill="${clr}"/>` : ''}
+      ${showLabels ? `<text x="${+rrx + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>` : ''}
     </g>`;
   }).join('');
 
@@ -308,16 +326,17 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
     const l = lowerResolved.foot;
     const y  = toY(0).toFixed(1);
     const fl = (l.footLength * scale);
-    const clr = clrFor(l.widthConfidence);
+    const clr = GUIDE_COLORS.foot;
     const ox = lowerResolved.legOffset * scale;
-    return `<g class="lm-hit" data-id="foot">
-      <line x1="${AXIS_X + ox}" y1="${y}" x2="${AXIS_X + ox + fl}" y2="${y}" stroke="${clr}" stroke-width="1.5" stroke-opacity="0.8"/>
-      <line x1="${AXIS_X - ox}" y1="${y}" x2="${AXIS_X - ox - fl}" y2="${y}" stroke="${clr}" stroke-width="1.5" stroke-opacity="0.8"/>
-      <text x="${AXIS_X + ox + fl + 5}" y="${+y - 4}" font-size="9" fill="${clr}">foot</text>
-    </g>`;
+    return showGuides ? `<g class="lm-hit" data-id="foot">
+      <line x1="${AXIS_X + ox}" y1="${y}" x2="${AXIS_X + ox + fl}" y2="${y}" stroke="${clr}" stroke-width="1.5"/>
+      <line x1="${AXIS_X - ox}" y1="${y}" x2="${AXIS_X - ox - fl}" y2="${y}" stroke="${clr}" stroke-width="1.5"/>
+      ${showLabels ? `<text x="${AXIS_X + ox + fl + 5}" y="${+y - 4}" font-size="9" fill="${clr}">foot</text>` : ''}
+    </g>` : '';
   })() : '';
 
   function buildArmGuideLines(lms, prefix, labelAnchor) {
+    if (!showGuides) return '';
     return lms.map((l, i, arr) => {
       const sx = AXIS_X + l.x * scale;
       const sy = toY(l.y);
@@ -333,7 +352,9 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
       const y1 = (l.innerPt ? toY(l.innerPt[1]) : sy - ny * hw).toFixed(1);
       const x2 = (l.outerPt ? AXIS_X + l.outerPt[0] * scale : sx + nx * hw).toFixed(1);
       const y2 = (l.outerPt ? toY(l.outerPt[1]) : sy + ny * hw).toFixed(1);
-      const clr = clrFor(l.widthConfidence);
+      const clr = labelAnchor === 'left'
+        ? l.section === 'hand' ? GUIDE_COLORS.leftHand : GUIDE_COLORS.leftArm
+        : l.section === 'hand' ? GUIDE_COLORS.rightHand : GUIDE_COLORS.rightArm;
       const key = `${prefix}${l.id}`;
       // Label on the outer side
       const labelPt = labelAnchor === 'left'
@@ -344,9 +365,9 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
       const ly = (labelPt[1] + 4).toFixed(1);
       return `<g class="lm-hit" data-id="${key}">
         <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
-              stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
-        <circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="2.5" fill="${clr}" opacity="0.7"/>
-        <text x="${lx}" y="${ly}" font-size="9" fill="${clr}" text-anchor="${anchor}">${l.id}</text>
+              stroke="${clr}" stroke-width="1.2" stroke-dasharray="3 2"/>
+        <circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="2.5" fill="${clr}"/>
+        ${showLabels ? `<text x="${lx}" y="${ly}" font-size="9" fill="${clr}" text-anchor="${anchor}">${l.id}</text>` : ''}
       </g>`;
     }).join('');
   }
@@ -354,12 +375,12 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const headGuideLines = headResolved.landmarks.map(l => {
     const y  = toY(l.y).toFixed(1);
     const hw = (l.halfW * scale).toFixed(1);
-    const clr = clrFor(l.widthConfidence);
+    const clr = GUIDE_COLORS.head;
     return `<g class="lm-hit" data-id="${l.id}">
-      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
-            stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
-      <circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}" opacity="0.7"/>
-      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+      ${showGuides ? `<line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="${clr}" stroke-width="1.2" stroke-dasharray="3 2"/>` : ''}
+      ${showGuides ? `<circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}"/>` : ''}
+      ${showLabels ? `<text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>` : ''}
     </g>`;
   }).join('');
 
@@ -380,8 +401,9 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const debugPtsSvg = buildDebugPts(armResolved.debugPts, 'L') + buildDebugPts(rightArmResolved.debugPts, 'R');
 
   const floor = `<line x1="0" y1="${PAD + BODY_H}" x2="${svgW}" y2="${PAD + BODY_H}" stroke="#3f3f46" stroke-width="1"/>`;
+  const centerLine = `<line x1="${AXIS_X}" y1="${PAD}" x2="${AXIS_X}" y2="${PAD + BODY_H}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>`;
 
-  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${hipOutlineSvg}${legOutlineSvg}${footSvg}${armSvg}${rightArmSvg}${headSvg}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}${hipGuideLines}${legGuideLines}${footGuide}${armGuideLines}${rightArmGuideLines}${headGuideLines}${debugPtsSvg}</svg>`, allLandmarks, rightArmResolved };
+  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${centerLine}${hipOutlineSvg}${legOutlineSvg}${footSvg}${armSvg}${rightArmSvg}${neckSvg}${headSvg}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}${hipGuideLines}${legGuideLines}${footGuide}${armGuideLines}${rightArmGuideLines}${headGuideLines}${debugPtsSvg}</svg>`, allLandmarks, rightArmResolved };
 }
 
 function buildDetailPanel(landmark) {
@@ -452,6 +474,14 @@ toolbarEl.innerHTML = `
   <input type="file" accept=".smis,.xml,.vit" style="display:none"/>
   <span class="upload-label" id="upload-label">or drop anywhere</span>
   <label style="color:#a1a1aa;font-size:11px;display:flex;align-items:center;gap:6px;margin-left:16px">
+    <input type="checkbox" id="hide-label"/>
+    Hide label
+  </label>
+  <label style="color:#a1a1aa;font-size:11px;display:flex;align-items:center;gap:6px">
+    <input type="checkbox" id="hide-guideline"/>
+    Hide guideline
+  </label>
+  <label style="color:#a1a1aa;font-size:11px;display:flex;align-items:center;gap:6px;margin-left:16px">
     Right arm angle
     <input type="range" id="arm-angle" min="-30" max="90" step="1" value="0" style="width:120px"/>
     <span id="arm-angle-val" style="color:#e4e4e7;min-width:30px">0°</span>
@@ -469,9 +499,19 @@ fileInput.addEventListener('change', e => {
 
 const armAngleInput = toolbarEl.querySelector('#arm-angle');
 const armAngleVal   = toolbarEl.querySelector('#arm-angle-val');
+const hideLabelInput = toolbarEl.querySelector('#hide-label');
+const hideGuidelineInput   = toolbarEl.querySelector('#hide-guideline');
 armAngleInput.addEventListener('input', () => {
   armAngleDeg = +armAngleInput.value;
   armAngleVal.textContent = `${armAngleDeg}°`;
+  renderAll();
+});
+hideLabelInput.addEventListener('change', () => {
+  hideLabel = hideLabelInput.checked;
+  renderAll();
+});
+hideGuidelineInput.addEventListener('change', () => {
+  hideGuideline = hideGuidelineInput.checked;
   renderAll();
 });
 
@@ -508,6 +548,8 @@ function loadFile(file) {
 }
 
 let armAngleDeg = 0;
+let hideLabel = false;
+let hideGuideline = false;
 
 function renderAll() {
   casesEl.innerHTML = '';
@@ -527,7 +569,10 @@ function renderAll() {
     const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, armfoldPt, totalH, leftHipSidePt, undefined, leftArmfoldPath);
     const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, armfoldPt, totalH, armAngleDeg, armfoldPath);
     const headResolved = resolveHeadLandmarks(R, totalH);
-    const { html: svgHtml, allLandmarks, rightArmResolved: rArm } = buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH);
+    const { html: svgHtml, allLandmarks, rightArmResolved: rArm } = buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH, {
+      hideLabel,
+      hideGuideline,
+    });
 
     const caseEl = document.createElement('div');
     caseEl.className = 'case';

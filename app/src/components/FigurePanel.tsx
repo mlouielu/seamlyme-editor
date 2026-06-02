@@ -26,9 +26,15 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
   const copyStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedLandmarkId, setSelectedLandmarkId] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
+  const [hideLabel, setHideLabel] = useState(false);
+  const [hideGuideline, setHideGuideline] = useState(false);
   const figureHtml = useMemo(
-    () => doc ? renderFigure(doc, { skinColor }) : null,
-    [doc, skinColor],
+    () => doc ? renderFigure(doc, {
+      skinColor,
+      showGuideLabels: !(hideLabel || hideGuideline),
+      showGuideTicks: !hideGuideline,
+    }) : null,
+    [doc, skinColor, hideLabel, hideGuideline],
   );
   const selectedLandmark = useMemo(
     () => doc && selectedLandmarkId
@@ -138,6 +144,22 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
       <div className="panel-header">
         <span>Body figure</span>
         <div className="figure-header-actions">
+          <label className="figure-toggle">
+            <input
+              type="checkbox"
+              checked={hideLabel}
+              onChange={event => setHideLabel(event.target.checked)}
+            />
+            Hide label
+          </label>
+          <label className="figure-toggle">
+            <input
+              type="checkbox"
+              checked={hideGuideline}
+              onChange={event => setHideGuideline(event.target.checked)}
+            />
+            Hide guideline
+          </label>
           <button
             type="button"
             className="figure-copy-button"
