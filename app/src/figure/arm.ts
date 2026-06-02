@@ -9,10 +9,6 @@ import {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const UPPER_ARM_ANGLE = 50 * Math.PI / 180;
-const INNER_NX = Math.cos(UPPER_ARM_ANGLE);
-const INNER_NY = -Math.sin(UPPER_ARM_ANGLE);
-
 const CANONICAL_HW: Record<string, number> = {
   shoulder:      0.032,
   'upper-arm':   0.032,
@@ -71,50 +67,141 @@ const handTipWC = (R: R) => handPalmWC(R).map(c => ({ ...c, source: `${c.source}
 
 // ── Main resolvers ────────────────────────────────────────────────────────────
 
-export function resolveLeftArmLandmarks(R: R, shoulderTipX: number, shoulderTipY: number, totalHeight: number): ArmResolved {
-  const armUpperW = R.arm_upper_circ > 0 ? R.arm_upper_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['shoulder'] * 2;
-  const armUpperHW = armUpperW / 2;
-  const shoulderX = shoulderTipX + INNER_NX * armUpperHW;
-  const shoulderY = shoulderTipY + INNER_NY * armUpperHW;
+export function resolveLeftArmLandmarks(
+  R: R,
+  shoulderTipX: number,
+  shoulderTipY: number,
+  armfoldPt: [number, number],
+  totalHeight: number,
+  hipSidePt?: [number, number],
+  bodySideXAtY?: (y: number) => number,
+): ArmResolved {
+  const innerShoulderX = -armfoldPt[0];
+  const innerShoulderY = armfoldPt[1];
+  const outerShoulderX = shoulderTipX;
+  const outerShoulderY = shoulderTipY;
 
   const upperArmLen = R.arm_shoulder_tip_to_elbow_bent > 0 ? R.arm_shoulder_tip_to_elbow_bent : R.arm_shoulder_tip_to_wrist_bent > 0 ? R.arm_shoulder_tip_to_wrist_bent * 0.6 : totalHeight * 0.223;
   const forearmLen = R.arm_elbow_to_wrist_bent > 0 ? R.arm_elbow_to_wrist_bent : (R.arm_shoulder_tip_to_wrist_bent > 0 && R.arm_shoulder_tip_to_elbow_bent > 0) ? R.arm_shoulder_tip_to_wrist_bent - R.arm_shoulder_tip_to_elbow_bent : totalHeight * 0.146;
 
-  const elbowX = shoulderX - upperArmLen * Math.sin(UPPER_ARM_ANGLE);
-  const elbowY = shoulderY - upperArmLen * Math.cos(UPPER_ARM_ANGLE);
+  const widthFor = (id: string, wCands: any[]): number => {
+    const landmark = buildLandmark(id, totalHeight, [], wCands, { yRatio: 0, halfWRatio: CANONICAL_HW[id] ?? 0.02 });
+    return (landmark.halfW ?? 0) * 2;
+  };
+  const widths = {
+    shoulder: widthFor('shoulder', shoulderWC(R)),
+    upperArm: widthFor('upper-arm', upperArmWC(R)),
+    aboveElbow: widthFor('above-elbow', aboveElbowWC(R)),
+    elbow: widthFor('elbow', elbowWC(R)),
+    lowerArm: widthFor('lower-arm', lowerArmWC(R)),
+    wrist: widthFor('wrist', wristWC(R)),
+    handPalm: widthFor('hand-palm', handPalmWC(R)),
+    handTip: widthFor('hand-tip', handTipWC(R)),
+  };
 
-  const wristY = R.height_highhip > 0 ? R.height_highhip : R.height_waist_side > 0 ? R.height_waist_side : totalHeight * 0.554;
-  const dropY = Math.min(Math.max(elbowY - wristY, 0), forearmLen * 0.99);
-  const forearmAngle = Math.acos(dropY / forearmLen);
-  const wristX = elbowX + forearmLen * Math.sin(forearmAngle);
-
-  const forearmDX = wristX - elbowX, forearmDY = wristY - elbowY, forearmL = Math.sqrt(forearmDX ** 2 + forearmDY ** 2) || 1;
-  const fDirX = forearmDX / forearmL, fDirY = forearmDY / forearmL;
+  // Bent-arm lengths describe the outer edge. The wrist's inner edge stays
+  // attached to the hip-side outline; widths generate the unmeasured inner edge.
+  const innerWristY = hipSidePt?.[1] ?? (R.height_hip > 0 ? R.height_hip : totalHeight * 0.485);
+  const innerWristX = hipSidePt?.[0] ?? bodySideXAtY?.(innerWristY) ?? innerShoulderX;
+  const outerWristX = innerWristX - widths.wrist;
+  const outerWristY = innerWristY;
+  const wristDX = outerWristX - outerShoulderX;
+  const wristDY = outerWristY - outerShoulderY;
+  const wristDistance = Math.sqrt(wristDX ** 2 + wristDY ** 2) || 1;
+  const reachableDistance = Math.min(Math.max(wristDistance, Math.abs(upperArmLen - forearmLen) + 1e-6), upperArmLen + forearmLen - 1e-6);
+  const unitX = wristDX / wristDistance;
+  const unitY = wristDY / wristDistance;
+  const elbowAlong = (upperArmLen ** 2 - forearmLen ** 2 + reachableDistance ** 2) / (2 * reachableDistance);
+  const elbowOut = Math.sqrt(Math.max(0, upperArmLen ** 2 - elbowAlong ** 2));
+  const outerElbowX = outerShoulderX + unitX * elbowAlong + unitY * elbowOut;
+  const outerElbowY = outerShoulderY + unitY * elbowAlong - unitX * elbowOut;
   const handLen = R.hand_length > 0 ? R.hand_length : R.hand_palm_length > 0 ? R.hand_palm_length * 1.5 : totalHeight * CANONICAL_HAND_LENGTH;
 
-  function lm(id: string, section: 'arm' | 'hand', x: number, y: number, wCands: any[]): ArmLandmark {
+  const directLength = (source: string, value: number): ResolveCandidate => ({
+    source,
+    value: value > 0 ? value : 0,
+    used: value > 0,
+    missing: !(value > 0),
+  });
+  const armfoldLengths = [directLength('shoulder_tip_to_armfold_f', R.shoulder_tip_to_armfold_f)];
+  const upperArmLengths = [
+    directLength('arm_shoulder_tip_to_elbow_bent', R.arm_shoulder_tip_to_elbow_bent),
+    directLength('arm_shoulder_tip_to_wrist_bent', R.arm_shoulder_tip_to_wrist_bent),
+  ];
+  const forearmLengths = [
+    directLength('arm_elbow_to_wrist_bent', R.arm_elbow_to_wrist_bent),
+    directLength('height_hip', R.height_hip),
+  ];
+  const handLengths = [
+    directLength('hand_length', R.hand_length),
+    directLength('hand_palm_length', R.hand_palm_length),
+  ];
+
+  function lm(id: string, section: 'arm' | 'hand', innerPt: [number, number], outerPt: [number, number], wCands: any[], lengths: ResolveCandidate[]): ArmLandmark {
+    const x = (innerPt[0] + outerPt[0]) / 2;
+    const y = (innerPt[1] + outerPt[1]) / 2;
+    const dx = outerPt[0] - innerPt[0], dy = outerPt[1] - innerPt[1];
     const base = buildLandmark(id, totalHeight, [{ source: `x=${x.toFixed(2)} y=${y.toFixed(2)} (computed)`, value: y }], wCands, { yRatio: 0, halfWRatio: CANONICAL_HW[id] ?? 0.02 });
-    return { ...base, side: 'left', section, x };
+    base.halfW = Math.sqrt(dx * dx + dy * dy) / 2;
+    return { ...base, side: 'left', section, x, y, innerPt, outerPt, lengthCandidates: lengths };
   }
 
-  const [umX, umY] = [shoulderX + (elbowX - shoulderX) * 0.45, shoulderY + (elbowY - shoulderY) * 0.45];
-  const [aeX, aeY] = [shoulderX + (elbowX - shoulderX) * 0.78, shoulderY + (elbowY - shoulderY) * 0.78];
-  const [laX, laY] = [elbowX + (wristX - elbowX) * 0.5, elbowY + (wristY - elbowY) * 0.5];
-  const [palmX, palmY] = [wristX + fDirX * handLen * 0.45, wristY + fDirY * handLen * 0.45];
-  const [tipX, tipY] = [wristX + fDirX * handLen, wristY + fDirY * handLen];
+  const lerpPt = (p1: [number, number], p2: [number, number], t: number): [number, number] => [
+    p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t,
+  ];
+  const outerShoulder: [number, number] = [outerShoulderX, outerShoulderY];
+  const outerElbow: [number, number] = [outerElbowX, outerElbowY];
+  const outerWrist: [number, number] = [outerWristX, outerWristY];
+  const outerUpperArm = lerpPt(outerShoulder, outerElbow, 0.45);
+  const outerAboveElbow = lerpPt(outerShoulder, outerElbow, 0.78);
+  const outerLowerArm = lerpPt(outerElbow, outerWrist, 0.5);
+
+  const insetFromOuter = (prev: [number, number], point: [number, number], next: [number, number], width: number): [number, number] => {
+    const dx = next[0] - prev[0], dy = next[1] - prev[1];
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const normalX = -dy / len, normalY = dx / len;
+    const direction = normalX >= 0 ? 1 : -1;
+    return [point[0] + direction * normalX * width, point[1] + direction * normalY * width];
+  };
+  const innerUpperArm = insetFromOuter(outerShoulder, outerUpperArm, outerAboveElbow, widths.upperArm);
+  const innerAboveElbow = insetFromOuter(outerUpperArm, outerAboveElbow, outerElbow, widths.aboveElbow);
+  const innerElbow = insetFromOuter(outerAboveElbow, outerElbow, outerLowerArm, widths.elbow);
+  const innerLowerArm = insetFromOuter(outerElbow, outerLowerArm, outerWrist, widths.lowerArm);
+
+  const palmY = innerWristY - handLen * 0.45;
+  const tipY = innerWristY - handLen;
+  const innerPalmX = bodySideXAtY?.(palmY) ?? innerWristX;
+  const innerTipX = bodySideXAtY?.(tipY) ?? innerWristX;
+  const innerPalm: [number, number] = [innerPalmX, palmY];
+  const outerPalm: [number, number] = [innerPalmX - widths.handPalm, palmY];
+  const innerTip: [number, number] = [innerTipX, tipY];
+  const outerTip: [number, number] = [innerTipX - widths.handTip, tipY];
 
   return {
     landmarks: [
-      lm('shoulder',    'arm',  shoulderX, shoulderY, shoulderWC(R)),
-      lm('upper-arm',   'arm',  umX,       umY,       upperArmWC(R)),
-      lm('above-elbow', 'arm',  aeX,       aeY,       aboveElbowWC(R)),
-      lm('elbow',       'arm',  elbowX,    elbowY,    elbowWC(R)),
-      lm('lower-arm',   'arm',  laX,       laY,       lowerArmWC(R)),
-      lm('wrist',       'arm',  wristX,    wristY,    wristWC(R)),
-      lm('hand-palm',   'hand', palmX,     palmY,     handPalmWC(R)),
-      lm('hand-tip',    'hand', tipX,      tipY,      handTipWC(R)),
+      lm('shoulder',    'arm',  [innerShoulderX, innerShoulderY], outerShoulder, shoulderWC(R), armfoldLengths),
+      lm('upper-arm',   'arm',  innerUpperArm,    outerUpperArm,   upperArmWC(R), upperArmLengths),
+      lm('above-elbow', 'arm',  innerAboveElbow,  outerAboveElbow, aboveElbowWC(R), upperArmLengths),
+      lm('elbow',       'arm',  innerElbow,       outerElbow,      elbowWC(R), upperArmLengths),
+      lm('lower-arm',   'arm',  innerLowerArm,    outerLowerArm,   lowerArmWC(R), forearmLengths),
+      lm('wrist',       'arm',  [innerWristX, innerWristY], outerWrist, wristWC(R), forearmLengths),
+      lm('hand-palm',   'hand', innerPalm,        outerPalm,       handPalmWC(R), handLengths),
+      lm('hand-tip',    'hand', innerTip,         outerTip,        handTipWC(R), handLengths),
     ],
     elbowIdx: 3,
+    debugPts: {
+      ST: [shoulderTipX, shoulderTipY],
+      A: [innerShoulderX, innerShoulderY],
+      B: [outerShoulderX, outerShoulderY],
+      C: innerElbow,
+      D: outerElbow,
+      E: [innerWristX, innerWristY],
+      F: outerWrist,
+      G: innerPalm,
+      H: outerPalm,
+      I: innerTip,
+      J: outerTip,
+    },
   };
 }
 

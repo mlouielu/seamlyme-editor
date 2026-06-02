@@ -197,8 +197,10 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const scale = BODY_H / totalH;
   const toY = h => PAD + (totalH - h) * scale;
   // Widen canvas to fit both arms
-  const minArmX = Math.min(...armResolved.landmarks.map(l => AXIS_X + l.x * scale)) - 20;
-  const maxArmX = Math.max(...rightArmResolved.landmarks.map(l => AXIS_X + l.x * scale)) + 20;
+  const leftArmXs = armResolved.landmarks.map(l => AXIS_X + l.x * scale);
+  const rightArmXs = rightArmResolved.landmarks.map(l => AXIS_X + l.x * scale);
+  const minArmX = (leftArmXs.length ? Math.min(...leftArmXs) : 0) - 20;
+  const maxArmX = (rightArmXs.length ? Math.max(...rightArmXs) : AXIS_X * 2) + 20;
   const leftPad  = Math.max(0, -minArmX);
   const rightPad = Math.max(0, maxArmX - (AXIS_X * 2));
   const svgW = AXIS_X * 2 + 80 + leftPad + rightPad, svgH = BODY_H + PAD * 2;
@@ -327,16 +329,19 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
       const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
       const nx = -tdy / tlen;
       const ny =  tdx / tlen;
-      const x1 = (sx - nx * hw).toFixed(1);
-      const y1 = (sy - ny * hw).toFixed(1);
-      const x2 = (sx + nx * hw).toFixed(1);
-      const y2 = (sy + ny * hw).toFixed(1);
+      const x1 = (l.innerPt ? AXIS_X + l.innerPt[0] * scale : sx - nx * hw).toFixed(1);
+      const y1 = (l.innerPt ? toY(l.innerPt[1]) : sy - ny * hw).toFixed(1);
+      const x2 = (l.outerPt ? AXIS_X + l.outerPt[0] * scale : sx + nx * hw).toFixed(1);
+      const y2 = (l.outerPt ? toY(l.outerPt[1]) : sy + ny * hw).toFixed(1);
       const clr = clrFor(l.widthConfidence);
       const key = `${prefix}${l.id}`;
       // Label on the outer side
-      const lx = labelAnchor === 'left' ? (+x1 - 3).toFixed(1) : (+x2 + 3).toFixed(1);
+      const labelPt = labelAnchor === 'left'
+        ? (+x1 <= +x2 ? [+x1, +y1] : [+x2, +y2])
+        : (+x1 >= +x2 ? [+x1, +y1] : [+x2, +y2]);
+      const lx = (labelPt[0] + (labelAnchor === 'left' ? -3 : 3)).toFixed(1);
       const anchor = labelAnchor === 'left' ? 'end' : 'start';
-      const ly = labelAnchor === 'left' ? (+y1 + 4).toFixed(1) : (+y2 + 4).toFixed(1);
+      const ly = (labelPt[1] + 4).toFixed(1);
       return `<g class="lm-hit" data-id="${key}">
         <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
               stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
@@ -361,15 +366,18 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const armGuideLines      = buildArmGuideLines(armResolved.landmarks,      'l-', 'left');
   const rightArmGuideLines = buildArmGuideLines(rightArmResolved.landmarks, 'r-', 'right');
 
-  // Debug: visualize all right arm control points
+  // Debug: visualize both arm control-point chains.
   const PT_COLORS = { ST:'#f97316', A:'#ef4444', B:'#facc15', C:'#4ade80', D:'#22d3ee', E:'#a78bfa', F:'#f472b6', G:'#fb923c', H:'#34d399', I:'#818cf8', J:'#f9a8d4' };
-  const debugPtsSvg = rightArmResolved.debugPts ? Object.entries(rightArmResolved.debugPts).map(([name, [px, py]]) => {
-    const cx = (AXIS_X + px * scale).toFixed(1);
-    const cy = toY(py).toFixed(1);
-    const color = PT_COLORS[name] ?? '#e4e4e7';
-    return `<circle cx="${cx}" cy="${cy}" r="4" fill="${color}" opacity="0.9"/>
-    <text x="${(+cx + 6).toFixed(1)}" y="${(+cy + 4).toFixed(1)}" fill="${color}" font-size="10" font-weight="bold">${name}</text>`;
-  }).join('') : '';
+  function buildDebugPts(points, side) {
+    return points ? Object.entries(points).map(([name, [px, py]]) => {
+      const cx = (AXIS_X + px * scale).toFixed(1);
+      const cy = toY(py).toFixed(1);
+      const color = PT_COLORS[name] ?? '#e4e4e7';
+      return `<circle cx="${cx}" cy="${cy}" r="4" fill="${color}" opacity="0.9"/>
+      <text x="${(+cx + 6).toFixed(1)}" y="${(+cy + 4).toFixed(1)}" fill="${color}" font-size="10" font-weight="bold">${side}-${name}</text>`;
+    }).join('') : '';
+  }
+  const debugPtsSvg = buildDebugPts(armResolved.debugPts, 'L') + buildDebugPts(rightArmResolved.debugPts, 'R');
 
   const floor = `<line x1="0" y1="${PAD + BODY_H}" x2="${svgW}" y2="${PAD + BODY_H}" stroke="#3f3f46" stroke-width="1"/>`;
 
@@ -512,7 +520,9 @@ function renderAll() {
     const shoulderTipY = shoulderLm?.y ?? totalH * 0.831;
     const L_A = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : totalH * 0.032;
     const armfoldPt = traceOutlineFromShoulder(resolved.outline, shoulderTipX, shoulderTipY, L_A);
-    const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, totalH);
+    const hipLm = lowerResolved.hip.find(l => l.id === 'hip');
+    const leftHipSidePt = hipLm?.y != null && hipLm.halfW != null ? [-hipLm.halfW, hipLm.y] : undefined;
+    const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, armfoldPt, totalH, leftHipSidePt);
     const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, armfoldPt, totalH, armAngleDeg);
     const headResolved = resolveHeadLandmarks(R, totalH);
     const { html: svgHtml, allLandmarks, rightArmResolved: rArm } = buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH);

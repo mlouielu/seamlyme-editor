@@ -84,7 +84,25 @@ export function resolveFullBody(R: R, totalHeightParam?: number): FullBodyResolv
   const L_A = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : totalHeight * 0.032;
   const armfoldPt = traceOutlineFromShoulder(torso.outline, shoulderX, shoulderY, L_A);
 
-  const leftArm  = resolveLeftArmLandmarks(R, -shoulderX, shoulderY, totalHeight);
+  const sideOutline = [...torso.outline, ...lowerBody.hip]
+    .filter(l => l.y !== null && l.halfW !== null)
+    .sort((a, b) => b.y! - a.y!);
+  const leftBodySideXAtY = (y: number): number => {
+    const upperIndex = sideOutline.findIndex(l => l.y! <= y);
+    if (upperIndex === -1) return -(sideOutline[sideOutline.length - 1]?.halfW ?? shoulderX);
+    if (upperIndex === 0) return -(sideOutline[0]?.halfW ?? shoulderX);
+    const upper = sideOutline[upperIndex - 1];
+    const lower = sideOutline[upperIndex];
+    const span = upper.y! - lower.y!;
+    const ratio = span > 0 ? (upper.y! - y) / span : 0;
+    return -(upper.halfW! + (lower.halfW! - upper.halfW!) * ratio);
+  };
+  const hip = lowerBody.hip.find(l => l.id === 'hip');
+  const leftHipSidePt: [number, number] | undefined = hip?.y != null && hip.halfW != null
+    ? [-hip.halfW, hip.y]
+    : undefined;
+
+  const leftArm  = resolveLeftArmLandmarks(R, -shoulderX, shoulderY, armfoldPt, totalHeight, leftHipSidePt, leftBodySideXAtY);
   const rightArm = resolveRightArmLandmarks(R, shoulderX, shoulderY, armfoldPt, totalHeight, RIGHT_ARM_ANGLE);
 
   return {
