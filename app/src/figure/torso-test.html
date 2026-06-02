@@ -83,7 +83,7 @@ import { resolveTorsoLandmarks, buildTorsoPath, buildNeckBackLines, buildNecklin
 import { resolveLowerBodyLandmarks, buildHipPath, buildLegPaths, buildFootPaths } from './lower-body.ts';
 import { resolveLeftArmLandmarks, resolveRightArmLandmarks, buildArmPath } from './arm.ts';
 import { resolveHeadLandmarks, buildHeadPath } from './head.ts';
-import { traceOutlineFromShoulder } from './factory.ts';
+import { traceOutlinePathFromShoulder } from './factory.ts';
 import { parseSmis } from '@seamlyme/core';
 
 const FULL = {
@@ -519,11 +519,13 @@ function renderAll() {
     const shoulderTipX = shoulderLm ? (shoulderLm.halfW ?? 0) : totalH * 0.115;
     const shoulderTipY = shoulderLm?.y ?? totalH * 0.831;
     const L_A = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : totalH * 0.032;
-    const armfoldPt = traceOutlineFromShoulder(resolved.outline, shoulderTipX, shoulderTipY, L_A);
+    const armfoldPath = traceOutlinePathFromShoulder(resolved.outline, shoulderTipX, shoulderTipY, L_A);
+    const armfoldPt = armfoldPath[armfoldPath.length - 1];
     const hipLm = lowerResolved.hip.find(l => l.id === 'hip');
     const leftHipSidePt = hipLm?.y != null && hipLm.halfW != null ? [-hipLm.halfW, hipLm.y] : undefined;
-    const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, armfoldPt, totalH, leftHipSidePt);
-    const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, armfoldPt, totalH, armAngleDeg);
+    const leftArmfoldPath = armfoldPath.map(([x, y]) => [-x, y]);
+    const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, armfoldPt, totalH, leftHipSidePt, undefined, leftArmfoldPath);
+    const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, armfoldPt, totalH, armAngleDeg, armfoldPath);
     const headResolved = resolveHeadLandmarks(R, totalH);
     const { html: svgHtml, allLandmarks, rightArmResolved: rArm } = buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH);
 

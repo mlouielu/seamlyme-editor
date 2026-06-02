@@ -437,6 +437,15 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 /* ── Figure panel ────────────────────────────────────────────────────────── */
 .figure-panel { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; min-height: 0; background: var(--surface); }
 
+.figure-header-actions { display: flex; align-items: center; gap: 8px; }
+.figure-copy-button {
+  padding: 3px 7px; border: 1px solid var(--border); border-radius: 4px;
+  background: var(--surface); color: var(--accent); cursor: pointer;
+  font-size: 10px; font-weight: 700;
+}
+.figure-copy-button:hover { background: var(--accent-l); }
+.figure-copy-button:disabled { color: var(--muted); cursor: default; opacity: .55; }
+.figure-copy-button:disabled:hover { background: var(--surface); }
 .skin-swatches { display: flex; align-items: center; gap: 3px; }
 .skin-swatch {
   width: 16px; height: 16px; padding: 0; border: 1px solid rgba(0,0,0,.15);

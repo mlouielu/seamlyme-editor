@@ -23,7 +23,9 @@ interface FigurePanelProps {
 function FigurePanel({ doc, skinColor }: FigurePanelProps) {
   const dispatch = useDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
+  const copyStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedLandmarkId, setSelectedLandmarkId] = useState<string | null>(null);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const figureHtml = useMemo(
     () => doc ? renderFigure(doc, { skinColor }) : null,
     [doc, skinColor],
@@ -52,6 +54,43 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
     container.addEventListener('click', onClick);
     return () => container.removeEventListener('click', onClick);
   }, [doc, figureHtml]);
+
+  useEffect(() => () => {
+    if (copyStatusTimerRef.current) clearTimeout(copyStatusTimerRef.current);
+  }, []);
+
+  function showCopyStatus(status: 'copied' | 'error') {
+    setCopyStatus(status);
+    if (copyStatusTimerRef.current) clearTimeout(copyStatusTimerRef.current);
+    copyStatusTimerRef.current = setTimeout(() => setCopyStatus('idle'), 1600);
+  }
+
+  function fallbackCopySvg(svg: string): boolean {
+    const textarea = document.createElement('textarea');
+    textarea.value = svg;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    const copied = document.execCommand('copy');
+    textarea.remove();
+    return copied;
+  }
+
+  async function copySvg() {
+    if (!figureHtml) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(figureHtml);
+      } else if (!fallbackCopySvg(figureHtml)) {
+        throw new Error('Clipboard copy failed');
+      }
+      showCopyStatus('copied');
+    } catch {
+      showCopyStatus(fallbackCopySvg(figureHtml) ? 'copied' : 'error');
+    }
+  }
 
   function candidateVariables(candidate: ResolveCandidate): string[] {
     if (!doc) return [];
@@ -98,23 +137,33 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
     <div className="figure-panel">
       <div className="panel-header">
         <span>Body figure</span>
-        <div className="skin-swatches">
-          {SKIN_PRESETS.map(preset => (
-            <button
-              key={preset.color}
-              className={`skin-swatch${skinColor === preset.color ? ' is-active' : ''}`}
-              title={preset.name}
-              style={{ background: preset.color }}
-              onClick={() => dispatch({ type: 'SET_SKIN_COLOR', color: preset.color })}
+        <div className="figure-header-actions">
+          <button
+            type="button"
+            className="figure-copy-button"
+            disabled={!figureHtml}
+            onClick={copySvg}
+          >
+            {copyStatus === 'copied' ? 'Copied' : copyStatus === 'error' ? 'Copy failed' : 'Copy SVG'}
+          </button>
+          <div className="skin-swatches">
+            {SKIN_PRESETS.map(preset => (
+              <button
+                key={preset.color}
+                className={`skin-swatch${skinColor === preset.color ? ' is-active' : ''}`}
+                title={preset.name}
+                style={{ background: preset.color }}
+                onClick={() => dispatch({ type: 'SET_SKIN_COLOR', color: preset.color })}
+              />
+            ))}
+            <input
+              type="color"
+              className="skin-picker"
+              value={skinColor}
+              title="Custom skin color"
+              onChange={event => dispatch({ type: 'SET_SKIN_COLOR', color: event.target.value })}
             />
-          ))}
-          <input
-            type="color"
-            className="skin-picker"
-            value={skinColor}
-            title="Custom skin color"
-            onChange={event => dispatch({ type: 'SET_SKIN_COLOR', color: event.target.value })}
-          />
+          </div>
         </div>
       </div>
 

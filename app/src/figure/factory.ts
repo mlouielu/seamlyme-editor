@@ -19,43 +19,72 @@ export interface FullBodyResolved {
 
 const RIGHT_ARM_ANGLE = 13;
 
-// Walk the torso outline right-side polyline from the shoulder tip by `distance`,
-// returning the point in measurement-space (halfW, y) coordinates.
+// Walk the rendered torso curve from the shoulder tip by `distance`.
+// Sampling keeps the arm attachment on the same curved outline used by the torso.
+export function traceOutlinePathFromShoulder(
+  outline: Landmark[],
+  shoulderX: number,
+  shoulderY: number,
+  distance: number,
+): [number, number][] {
+  const sidx = outline.findIndex(l => l.id === 'shoulder');
+  const pts = outline
+    .filter(l => l.y !== null && l.halfW !== null)
+    .map(l => [l.halfW!, l.y!] as [number, number]);
+  const shoulderIdx = Math.max(0, sidx);
+  pts[shoulderIdx] = [shoulderX, shoulderY];
+
+  const sampleCurve = (index: number, t: number): [number, number] => {
+    const p0 = pts[Math.max(0, index - 1)];
+    const p1 = pts[index];
+    const p2 = pts[index + 1];
+    const p3 = pts[Math.min(pts.length - 1, index + 2)];
+    const t2 = t * t, t3 = t2 * t;
+    return [
+      0.5 * ((2 * p1[0]) + (-p0[0] + p2[0]) * t + (2 * p0[0] - 5 * p1[0] + 4 * p2[0] - p3[0]) * t2 + (-p0[0] + 3 * p1[0] - 3 * p2[0] + p3[0]) * t3),
+      0.5 * ((2 * p1[1]) + (-p0[1] + p2[1]) * t + (2 * p0[1] - 5 * p1[1] + 4 * p2[1] - p3[1]) * t2 + (-p0[1] + 3 * p1[1] - 3 * p2[1] + p3[1]) * t3),
+    ];
+  };
+
+  const traced: [number, number][] = [[shoulderX, shoulderY]];
+  let previous = traced[0];
+  let remaining = distance;
+  for (let i = shoulderIdx; i < pts.length - 1; i++) {
+    for (let step = 1; step <= 12; step++) {
+      const point = sampleCurve(i, step / 12);
+      const dx = point[0] - previous[0], dy = point[1] - previous[1];
+      const segmentLength = Math.sqrt(dx * dx + dy * dy);
+      if (remaining <= segmentLength) {
+        const ratio = segmentLength > 0 ? remaining / segmentLength : 0;
+        traced.push([previous[0] + dx * ratio, previous[1] + dy * ratio]);
+        return traced;
+      }
+      traced.push(point);
+      previous = point;
+      remaining -= segmentLength;
+    }
+  }
+
+  // Extrapolate past the last segment if distance exceeds the outline
+  if (traced.length >= 2) {
+    const last = traced[traced.length - 1];
+    const prev = traced[traced.length - 2];
+    const dx = last[0] - prev[0], dy = last[1] - prev[1];
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    traced.push([last[0] + remaining * dx / len, last[1] + remaining * dy / len]);
+  }
+
+  return traced;
+}
+
 export function traceOutlineFromShoulder(
   outline: Landmark[],
   shoulderX: number,
   shoulderY: number,
   distance: number,
 ): [number, number] {
-  const sidx = outline.findIndex(l => l.id === 'shoulder');
-  const pts: [number, number][] = [[shoulderX, shoulderY]];
-  for (let i = sidx + 1; i < outline.length; i++) {
-    const l = outline[i];
-    if (l.y !== null && l.halfW !== null) pts.push([l.halfW, l.y]);
-  }
-
-  let rem = distance;
-  for (let i = 0; i < pts.length - 1; i++) {
-    const dx = pts[i + 1][0] - pts[i][0];
-    const dy = pts[i + 1][1] - pts[i][1];
-    const seg = Math.sqrt(dx * dx + dy * dy);
-    if (rem <= seg) {
-      const t = rem / seg;
-      return [pts[i][0] + t * dx, pts[i][1] + t * dy];
-    }
-    rem -= seg;
-  }
-
-  // Extrapolate past the last segment if distance exceeds the outline
-  if (pts.length >= 2) {
-    const last = pts[pts.length - 1];
-    const prev = pts[pts.length - 2];
-    const dx = last[0] - prev[0], dy = last[1] - prev[1];
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    return [last[0] + rem * dx / len, last[1] + rem * dy / len];
-  }
-
-  return [shoulderX, shoulderY - distance];
+  const path = traceOutlinePathFromShoulder(outline, shoulderX, shoulderY, distance);
+  return path[path.length - 1];
 }
 
 export function resolveFullBody(R: R, totalHeightParam?: number): FullBodyResolved {
@@ -82,7 +111,8 @@ export function resolveFullBody(R: R, totalHeightParam?: number): FullBodyResolv
   // Point A (armfold inner): trace down the actual torso outline from shoulder tip
   // by shoulder_tip_to_armfold_f so the arm attaches exactly on the torso edge.
   const L_A = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : totalHeight * 0.032;
-  const armfoldPt = traceOutlineFromShoulder(torso.outline, shoulderX, shoulderY, L_A);
+  const armfoldPath = traceOutlinePathFromShoulder(torso.outline, shoulderX, shoulderY, L_A);
+  const armfoldPt = armfoldPath[armfoldPath.length - 1];
 
   const sideOutline = [...torso.outline, ...lowerBody.hip]
     .filter(l => l.y !== null && l.halfW !== null)
@@ -102,8 +132,9 @@ export function resolveFullBody(R: R, totalHeightParam?: number): FullBodyResolv
     ? [-hip.halfW, hip.y]
     : undefined;
 
-  const leftArm  = resolveLeftArmLandmarks(R, -shoulderX, shoulderY, armfoldPt, totalHeight, leftHipSidePt, leftBodySideXAtY);
-  const rightArm = resolveRightArmLandmarks(R, shoulderX, shoulderY, armfoldPt, totalHeight, RIGHT_ARM_ANGLE);
+  const leftArmfoldPath = armfoldPath.map(([x, y]) => [-x, y] as [number, number]);
+  const leftArm  = resolveLeftArmLandmarks(R, -shoulderX, shoulderY, armfoldPt, totalHeight, leftHipSidePt, leftBodySideXAtY, leftArmfoldPath);
+  const rightArm = resolveRightArmLandmarks(R, shoulderX, shoulderY, armfoldPt, totalHeight, RIGHT_ARM_ANGLE, armfoldPath);
 
   return {
     head,
