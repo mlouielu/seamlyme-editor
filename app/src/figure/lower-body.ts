@@ -1,24 +1,14 @@
 /**
  * Lower-body outline renderer — waist to ankle.
- *
- * Two separate shapes:
- *   hip  — symmetric silhouette from waist → highhip → hip → crotch
- *   leg  — two mirrored leg paths from thigh-upper → ankle
- *          halfW = radius of one leg (leg_circ / 2π)
- *          each leg is centered at ±legOffset from the body axis
- *
- * Same candidate/pick/canonical pattern as torso.ts.
  */
-
-type R = Record<string, number>;
-
-// ── Constants ─────────────────────────────────────────────────────────────────
-
-const ARC_TO_HALF_WIDTH  = 0.5;
-const CIRC_TO_HALF_WIDTH = 1 / Math.PI;  // circ → radius = circ / 2π
+import {
+  R, Landmark, PathOptions,
+  buildLandmark, crPath,
+  measuredY, measuredW, offsetUpY, offsetDownY, lerpY, arcWidth, circWidth,
+  resolveArcRatio, CIRC_TO_WIDTH
+} from './common';
 
 // ── Canonical proportions ─────────────────────────────────────────────────────
-// Derived from a typical 165cm female (65 in sample data).
 
 const CANONICAL_HIP: Record<string, { yRatio: number; halfWRatio: number }> = {
   waist:   { yRatio: 0.615, halfWRatio: 0.104 },
@@ -27,7 +17,6 @@ const CANONICAL_HIP: Record<string, { yRatio: number; halfWRatio: number }> = {
   crotch:  { yRatio: 0.462, halfWRatio: 0.138 },
 };
 
-// halfW = radius of one leg (leg_circ / 2π)
 const CANONICAL_LEG: Record<string, { yRatio: number; halfWRatio: number }> = {
   'thigh-upper': { yRatio: 0.400, halfWRatio: 0.054 },
   'thigh-mid':   { yRatio: 0.338, halfWRatio: 0.048 },
@@ -38,322 +27,127 @@ const CANONICAL_LEG: Record<string, { yRatio: number; halfWRatio: number }> = {
   ankle:         { yRatio: 0.038, halfWRatio: 0.022 },
 };
 
-// legOffset canonical: center of each leg from body axis as fraction of totalHeight
 const CANONICAL_LEG_OFFSET_RATIO = 0.088;
-
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-export interface ResolveCandidate {
-  source: string;
-  value: number;
-  used: boolean;
-  missing?: boolean;
-}
-
-export interface LowerBodyLandmark {
-  id: string;
-  y: number | null;
-  ySource: string | null;
-  yCandidates: ResolveCandidate[];
-  halfW: number | null;
-  wSource: string | null;
-  wCandidates: ResolveCandidate[];
-  widthConfidence: 'direct' | 'arc' | 'circ' | 'canonical';
-}
-
-interface YCandidate { source: string; value: number }
-interface WCandidate { source: string; value: number; confidence: LowerBodyLandmark['widthConfidence']; missing?: boolean }
-
-function pickY(candidates: YCandidate[]): { y: number; source: string; all: ResolveCandidate[] } | null {
-  if (!candidates.length) return null;
-  const used = candidates[0];
-  return {
-    y: used.value,
-    source: used.source,
-    all: candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === 0 })),
-  };
-}
-
-function pickW(candidates: WCandidate[]): { halfW: number; source: string; confidence: LowerBodyLandmark['widthConfidence']; all: ResolveCandidate[] } | null {
-  if (!candidates.length) return null;
-  const idx = candidates.findIndex(c => !c.missing);
-  const used = candidates[idx >= 0 ? idx : candidates.length - 1];
-  return {
-    halfW: used.value,
-    source: used.source,
-    confidence: used.confidence,
-    all: candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === (idx >= 0 ? idx : candidates.length - 1), missing: c.missing })),
-  };
-}
-
-// ── Arc-to-width ratio ────────────────────────────────────────────────────────
-
-export function resolveArcRatio(R: R): number {
-  const pairs = [
-    { arc: R.bust_arc_f,  width: R.width_bust  },
-    { arc: R.waist_arc_f, width: R.width_waist },
-    { arc: R.hip_arc_f,   width: R.width_hip   },
-  ];
-  const ratios = pairs
-    .filter(p => p.arc > 0 && p.width > 0)
-    .map(p => (p.width / 2) / p.arc);
-  if (!ratios.length) return ARC_TO_HALF_WIDTH;
-  const avg = ratios.reduce((s, v) => s + v, 0) / ratios.length;
-  return Math.min(Math.max(avg, 0.35), 0.65);
-}
-
-// ── Hip section: Y candidates ─────────────────────────────────────────────────
-
-function waistYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_waist_side > 0)  out.push({ source: 'height_waist_side',  value: R.height_waist_side });
-  if (R.height_waist_front > 0) out.push({ source: 'height_waist_front', value: R.height_waist_front });
-  return out;
-}
-
-function highhipYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_highhip > 0)
-    out.push({ source: 'height_highhip', value: R.height_highhip });
-  if (R.height_waist_side > 0 && R.waist_to_highhip_side > 0)
-    out.push({ source: 'height_waist_side - waist_to_highhip_side', value: R.height_waist_side - R.waist_to_highhip_side });
-  return out;
-}
-
-function hipYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_hip > 0)
-    out.push({ source: 'height_hip', value: R.height_hip });
-  if (R.height_waist_side > 0 && R.waist_to_hip_side > 0)
-    out.push({ source: 'height_waist_side - waist_to_hip_side', value: R.height_waist_side - R.waist_to_hip_side });
-  return out;
-}
-
-function crotchYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.leg_crotch_to_floor > 0)
-    out.push({ source: 'leg_crotch_to_floor', value: R.leg_crotch_to_floor });
-  if (R.height_hip > 0)
-    out.push({ source: 'height_hip × 0.93', value: R.height_hip * 0.93 });
-  if (R.height_gluteal_fold > 0)
-    out.push({ source: 'height_gluteal_fold', value: R.height_gluteal_fold });
-
-  return out;
-}
-
-// ── Hip section: W candidates ─────────────────────────────────────────────────
-
-function waistWCandidates(R: R, arcRatio: number): WCandidate[] {
-  return [
-    { source: 'width_waist / 2',                      value: R.width_waist > 0 ? R.width_waist * 0.5                     : 0, confidence: 'direct', missing: !(R.width_waist > 0) },
-    { source: `waist_arc_f × ${arcRatio.toFixed(3)}`, value: R.waist_arc_f > 0 ? R.waist_arc_f * arcRatio                : 0, confidence: 'arc',    missing: !(R.waist_arc_f > 0) },
-    { source: 'waist_circ / (2π)',                     value: R.waist_circ  > 0 ? R.waist_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.waist_circ  > 0) },
-  ];
-}
-
-function highhipWCandidates(R: R, arcRatio: number): WCandidate[] {
-  return [
-    { source: `highhip_arc_f × ${arcRatio.toFixed(3)}`, value: R.highhip_arc_f > 0 ? R.highhip_arc_f * arcRatio               : 0, confidence: 'arc',  missing: !(R.highhip_arc_f > 0) },
-    { source: 'highhip_circ / (2π)',                     value: R.highhip_circ  > 0 ? R.highhip_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.highhip_circ  > 0) },
-  ];
-}
-
-function hipWCandidates(R: R, arcRatio: number): WCandidate[] {
-  return [
-    { source: 'width_hip / 2',                       value: R.width_hip  > 0 ? R.width_hip * 0.5                      : 0, confidence: 'direct', missing: !(R.width_hip  > 0) },
-    { source: `hip_arc_f × ${arcRatio.toFixed(3)}`,  value: R.hip_arc_f  > 0 ? R.hip_arc_f * arcRatio                 : 0, confidence: 'arc',    missing: !(R.hip_arc_f  > 0) },
-    { source: 'hip_circ / (2π)',                      value: R.hip_circ   > 0 ? R.hip_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.hip_circ   > 0) },
-  ];
-}
-
-function crotchWCandidates(R: R, arcRatio: number): WCandidate[] {
-  return [
-    { source: `hip_arc_f × ${arcRatio.toFixed(3)} × 0.92`, value: R.hip_arc_f > 0 ? R.hip_arc_f * arcRatio * 0.92                : 0, confidence: 'arc',  missing: !(R.hip_arc_f > 0) },
-    { source: 'hip_circ / (2π) × 0.92',                    value: R.hip_circ  > 0 ? R.hip_circ  * CIRC_TO_HALF_WIDTH * 0.5 * 0.92 : 0, confidence: 'circ', missing: !(R.hip_circ  > 0) },
-  ];
-}
-
-// ── Leg section: Y candidates ─────────────────────────────────────────────────
-
-function thighUpperYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_gluteal_fold > 0 && R.height_knee > 0)
-    out.push({ source: 'lerp(height_gluteal_fold, height_knee, 0.3)', value: R.height_gluteal_fold * 0.7 + R.height_knee * 0.3 });
-  if (R.leg_crotch_to_floor > 0 && R.height_knee > 0)
-    out.push({ source: 'lerp(leg_crotch_to_floor, height_knee, 0.3)', value: R.leg_crotch_to_floor * 0.7 + R.height_knee * 0.3 });
-  return out;
-}
-
-function thighMidYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_gluteal_fold > 0 && R.height_knee > 0)
-    out.push({ source: 'lerp(height_gluteal_fold, height_knee, 0.55)', value: R.height_gluteal_fold * 0.45 + R.height_knee * 0.55 });
-  if (R.leg_crotch_to_floor > 0 && R.height_knee > 0)
-    out.push({ source: 'lerp(leg_crotch_to_floor, height_knee, 0.55)', value: R.leg_crotch_to_floor * 0.45 + R.height_knee * 0.55 });
-  return out;
-}
-
-function kneeYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_knee > 0)
-    out.push({ source: 'height_knee', value: R.height_knee });
-  if (R.height_waist_side > 0 && R.height_waist_side_to_knee > 0)
-    out.push({ source: 'height_waist_side - height_waist_side_to_knee', value: R.height_waist_side - R.height_waist_side_to_knee });
-  return out;
-}
-
-function kneeSmallYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_knee > 0)
-    out.push({ source: 'height_knee × 0.93', value: R.height_knee * 0.93 });
-  return out;
-}
-
-function calfYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_calf > 0)
-    out.push({ source: 'height_calf', value: R.height_calf });
-  if (R.height_knee > 0 && R.height_ankle_high > 0)
-    out.push({ source: 'lerp(height_knee, height_ankle_high, 0.5)', value: (R.height_knee + R.height_ankle_high) / 2 });
-  return out;
-}
-
-function ankleHighYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_ankle_high > 0)
-    out.push({ source: 'height_ankle_high', value: R.height_ankle_high });
-  return out;
-}
-
-function ankleYCandidates(R: R): YCandidate[] {
-  const out: YCandidate[] = [];
-  if (R.height_ankle > 0)
-    out.push({ source: 'height_ankle', value: R.height_ankle });
-  if (R.height_ankle_high > 0)
-    out.push({ source: 'height_ankle_high × 0.6', value: R.height_ankle_high * 0.6 });
-  return out;
-}
-
-// ── Leg section: W candidates (halfW = radius of one leg = circ / 2π) ─────────
-
-function thighUpperWCandidates(R: R): WCandidate[] {
-  return [{ source: 'leg_thigh_upper_circ / (2π)', value: R.leg_thigh_upper_circ > 0 ? R.leg_thigh_upper_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_thigh_upper_circ > 0) }];
-}
-
-function thighMidWCandidates(R: R): WCandidate[] {
-  return [{ source: 'leg_thigh_mid_circ / (2π)', value: R.leg_thigh_mid_circ > 0 ? R.leg_thigh_mid_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_thigh_mid_circ > 0) }];
-}
-
-function kneeWCandidates(R: R): WCandidate[] {
-  return [{ source: 'leg_knee_circ / (2π)', value: R.leg_knee_circ > 0 ? R.leg_knee_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_knee_circ > 0) }];
-}
-
-function kneeSmallWCandidates(R: R): WCandidate[] {
-  return [
-    { source: 'leg_knee_small_circ / (2π)',       value: R.leg_knee_small_circ > 0 ? R.leg_knee_small_circ * CIRC_TO_HALF_WIDTH * 0.5        : 0, confidence: 'circ', missing: !(R.leg_knee_small_circ > 0) },
-    { source: 'leg_knee_circ / (2π) × 0.87',      value: R.leg_knee_circ       > 0 ? R.leg_knee_circ       * CIRC_TO_HALF_WIDTH * 0.5 * 0.87 : 0, confidence: 'circ', missing: !(R.leg_knee_circ       > 0) },
-  ];
-}
-
-function calfWCandidates(R: R): WCandidate[] {
-  return [{ source: 'leg_calf_circ / (2π)', value: R.leg_calf_circ > 0 ? R.leg_calf_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_calf_circ > 0) }];
-}
-
-function ankleHighWCandidates(R: R): WCandidate[] {
-  return [{ source: 'leg_ankle_high_circ / (2π)', value: R.leg_ankle_high_circ > 0 ? R.leg_ankle_high_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_ankle_high_circ > 0) }];
-}
-
-function ankleWCandidates(R: R): WCandidate[] {
-  return [
-    { source: 'leg_ankle_circ / (2π)',        value: R.leg_ankle_circ      > 0 ? R.leg_ankle_circ      * CIRC_TO_HALF_WIDTH * 0.5       : 0, confidence: 'circ', missing: !(R.leg_ankle_circ      > 0) },
-    { source: 'leg_ankle_high_circ / (2π) × 0.9', value: R.leg_ankle_high_circ > 0 ? R.leg_ankle_high_circ * CIRC_TO_HALF_WIDTH * 0.5 * 0.9 : 0, confidence: 'circ', missing: !(R.leg_ankle_high_circ > 0) },
-  ];
-}
-
-// ── Foot section ──────────────────────────────────────────────────────────────
-
-// Canonical foot: halfW = foot_length (toe spread from leg center); y = 0 (floor)
-const CANONICAL_FOOT = { halfWRatio: 0.146 }; // foot_length / totalHeight ≈ 9.5/65
-
-function footWCandidates(R: R): WCandidate[] {
-  return [
-    { source: 'foot_length',              value: R.foot_length       > 0 ? R.foot_length                            : 0, confidence: 'direct', missing: !(R.foot_length       > 0) },
-    { source: 'foot_circ / (2π)',         value: R.foot_circ         > 0 ? R.foot_circ         * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.foot_circ         > 0) },
-    { source: 'foot_instep_circ / (2π)', value: R.foot_instep_circ   > 0 ? R.foot_instep_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.foot_instep_circ   > 0) },
-  ];
-}
 
 // ── Main resolver ─────────────────────────────────────────────────────────────
 
+export interface FootResolved extends Landmark {
+  footLength: number;
+  instepWidth: number;
+  ballWidth: number;
+}
+
 export interface LowerBodyResolved {
-  /** Single symmetric hip block: waist → highhip → hip → crotch. */
-  hip: LowerBodyLandmark[];
-  /** Per-leg landmarks. halfW = radius of one leg (leg_circ / 2π). */
-  leg: LowerBodyLandmark[];
-  /**
-   * Distance from body axis to center of each leg, in measurement units.
-   * Inner edges of both legs meet at the center axis: legOffset = thigh radius.
-   */
+  hip: Landmark[];
+  leg: Landmark[];
   legOffset: number;
-  /** Foot shape data. halfW = foot_length (toe spread from leg center outward). */
-  foot: LowerBodyLandmark | null;
+  foot: FootResolved | null;
 }
 
 export function resolveLowerBodyLandmarks(R: R, totalHeight: number): LowerBodyResolved {
   const arcRatio = resolveArcRatio(R);
 
-  function build(
-    canonical: Record<string, { yRatio: number; halfWRatio: number }>,
-    id: string,
-    yC: YCandidate[],
-    wC: WCandidate[],
-  ): LowerBodyLandmark {
-    const canon = canonical[id];
-    const allY = [...yC];
-    if (canon) allY.push({ source: `canonical ratio ${canon.yRatio}`, value: totalHeight * canon.yRatio });
-    const allW = [...wC];
-    if (canon) allW.push({ source: `canonical ratio ${canon.halfWRatio}`, value: totalHeight * canon.halfWRatio, confidence: 'canonical' as const });
-    const yr = pickY(allY);
-    const wr = pickW(allW);
-    return {
-      id, y: yr?.y ?? null, ySource: yr?.source ?? null, yCandidates: yr?.all ?? [],
-      halfW: wr?.halfW ?? null, wSource: wr?.source ?? null, wCandidates: wr?.all ?? [],
-      widthConfidence: wr?.confidence ?? 'canonical',
-    };
-  }
-
-  const bh = (id: string, yC: YCandidate[], wC: WCandidate[]) => build(CANONICAL_HIP, id, yC, wC);
-  const bl = (id: string, yC: YCandidate[], wC: WCandidate[]) => build(CANONICAL_LEG, id, yC, wC);
+  const bh = (id: string, yC: any[], wC: any[]) => buildLandmark(id, totalHeight, yC, wC, CANONICAL_HIP[id]);
+  const bl = (id: string, yC: any[], wC: any[]) => buildLandmark(id, totalHeight, yC, wC, CANONICAL_LEG[id]);
 
   const hip = [
-    bh('waist',   waistYCandidates(R),   waistWCandidates(R, arcRatio)),
-    bh('highhip', highhipYCandidates(R), highhipWCandidates(R, arcRatio)),
-    bh('hip',     hipYCandidates(R),     hipWCandidates(R, arcRatio)),
-    bh('crotch',  crotchYCandidates(R),  crotchWCandidates(R, arcRatio)),
-  ].filter(l => l.y !== null) as LowerBodyLandmark[];
+    bh('waist', [
+        ...measuredY(R, 'height_waist_side'),
+        ...measuredY(R, 'height_waist_front')
+      ], [
+        ...measuredW(R, 'width_waist', 'direct'),
+        ...arcWidth(R, 'waist_arc_f', arcRatio),
+        ...circWidth(R, 'waist_circ')
+      ]),
+    bh('highhip', [
+        ...measuredY(R, 'height_highhip'),
+        ...offsetDownY(R, 'height_waist_side', 'waist_to_highhip_side')
+      ], [
+        ...arcWidth(R, 'highhip_arc_f', arcRatio),
+        ...circWidth(R, 'highhip_circ')
+      ]),
+    bh('hip', [
+        ...measuredY(R, 'height_hip'),
+        ...offsetDownY(R, 'height_waist_side', 'waist_to_hip_side')
+      ], [
+        ...measuredW(R, 'width_hip', 'direct'),
+        ...arcWidth(R, 'hip_arc_f', arcRatio),
+        ...circWidth(R, 'hip_circ')
+      ]),
+    bh('crotch', [
+        ...measuredY(R, 'leg_crotch_to_floor'),
+        ...(R.height_hip > 0 ? [{ source: 'height_hip × 0.93', value: R.height_hip * 0.93 }] : []),
+        ...measuredY(R, 'height_gluteal_fold')
+      ], [
+        ...arcWidth(R, 'hip_arc_f', arcRatio).map(c => ({ ...c, value: c.value * 0.92, source: c.source + ' × 0.92' })),
+        ...circWidth(R, 'hip_circ').map(c => ({ ...c, value: c.value * 0.92, source: c.source + ' × 0.92' }))
+      ]),
+  ].filter(l => l.y !== null);
 
   const leg = [
-    bl('thigh-upper', thighUpperYCandidates(R), thighUpperWCandidates(R)),
-    bl('thigh-mid',   thighMidYCandidates(R),   thighMidWCandidates(R)),
-    bl('knee',        kneeYCandidates(R),        kneeWCandidates(R)),
-    bl('knee-small',  kneeSmallYCandidates(R),   kneeSmallWCandidates(R)),
-    bl('calf',        calfYCandidates(R),        calfWCandidates(R)),
-    bl('ankle-high',  ankleHighYCandidates(R),   ankleHighWCandidates(R)),
-    bl('ankle',       ankleYCandidates(R),       ankleWCandidates(R)),
-  ].filter(l => l.y !== null) as LowerBodyLandmark[];
+    bl('thigh-upper', [
+        ...(R.height_gluteal_fold > 0 && R.height_knee > 0 ? [{ source: 'lerp(height_gluteal_fold, height_knee, 0.1)', value: R.height_gluteal_fold * 0.9 + R.height_knee * 0.1 }] : []),
+        ...(R.leg_crotch_to_floor > 0 && R.height_knee > 0 ? [{ source: 'lerp(leg_crotch_to_floor, height_knee, 0.3)', value: R.leg_crotch_to_floor * 0.7 + R.height_knee * 0.3 }] : [])
+      ], [
+        ...circWidth(R, 'leg_thigh_upper_circ')
+      ]),
+    bl('thigh-mid', [
+        ...(R.height_gluteal_fold > 0 && R.height_knee > 0 ? [{ source: 'lerp(height_gluteal_fold, height_knee, 0.55)', value: R.height_gluteal_fold * 0.45 + R.height_knee * 0.55 }] : []),
+        ...(R.leg_crotch_to_floor > 0 && R.height_knee > 0 ? [{ source: 'lerp(leg_crotch_to_floor, height_knee, 0.55)', value: R.leg_crotch_to_floor * 0.45 + R.height_knee * 0.55 }] : [])
+      ], [
+        ...circWidth(R, 'leg_thigh_mid_circ')
+      ]),
+    bl('knee', [
+        ...measuredY(R, 'height_knee'),
+        ...offsetDownY(R, 'height_waist_side', 'height_waist_side_to_knee')
+      ], [
+        ...circWidth(R, 'leg_knee_circ')
+      ]),
+    bl('knee-small', [
+        ...(R.height_knee > 0 ? [{ source: 'height_knee × 0.93', value: R.height_knee * 0.93 }] : [])
+      ], [
+        ...circWidth(R, 'leg_knee_small_circ'),
+        ...circWidth(R, 'leg_knee_circ').map(c => ({ ...c, value: c.value * 0.87, source: c.source + ' × 0.87' }))
+      ]),
+    bl('calf', [
+        ...measuredY(R, 'height_calf'),
+        ...lerpY(R, 'height_knee', 'height_ankle_high', 0.5)
+      ], [
+        ...circWidth(R, 'leg_calf_circ')
+      ]),
+    bl('ankle-high', [
+        ...measuredY(R, 'height_ankle_high')
+      ], [
+        ...circWidth(R, 'leg_ankle_high_circ')
+      ]),
+    bl('ankle', [
+        ...measuredY(R, 'height_ankle'),
+        ...(R.height_ankle_high > 0 ? [{ source: 'height_ankle_high × 0.6', value: R.height_ankle_high * 0.6 }] : [])
+      ], [
+        ...circWidth(R, 'leg_ankle_circ'),
+        ...circWidth(R, 'leg_ankle_high_circ').map(c => ({ ...c, value: c.value * 0.9, source: c.source + ' × 0.9' }))
+      ]),
+  ].filter(l => l.y !== null);
 
   const thighLm = leg.find(l => l.id === 'thigh-upper');
-  // Inner edges of both legs meet at the center axis: legOffset = thigh radius
   const legOffset = thighLm?.halfW ?? totalHeight * CANONICAL_LEG_OFFSET_RATIO;
 
-  // Foot: y=0 (floor), halfW = foot_length (lateral toe spread from leg center)
-  const footWC = footWCandidates(R);
-  footWC.push({ source: `canonical ratio ${CANONICAL_FOOT.halfWRatio}`, value: totalHeight * CANONICAL_FOOT.halfWRatio, confidence: 'canonical' });
-  const footWR = pickW(footWC);
-  const foot: LowerBodyLandmark | null = footWR ? {
-    id: 'foot', y: 0, ySource: 'floor', yCandidates: [{ source: 'floor', value: 0, used: true }],
-    halfW: footWR.halfW, wSource: footWR.source, wCandidates: footWR.all,
-    widthConfidence: footWR.confidence,
+  // Foot resolution
+  const footWC = [
+    ...(R.foot_length > 0 ? [{ source: 'foot_length', value: R.foot_length, confidence: 'derived' as const }] : []), // using length as a metric for list
+  ];
+  const footBase = buildLandmark('foot', totalHeight, [{ source: 'floor', value: 0 }], footWC, { yRatio: 0, halfWRatio: 0.032 });
+
+  const footLength = R.foot_length > 0 ? R.foot_length : totalHeight * 0.146;
+  const instepWidth = R.foot_instep_circ > 0 ? R.foot_instep_circ * CIRC_TO_WIDTH : totalHeight * 0.055;
+  const ballWidth = R.foot_circ > 0 ? R.foot_circ * CIRC_TO_WIDTH : totalHeight * 0.045;
+
+
+  const foot: FootResolved | null = footBase.y !== null ? {
+    ...footBase,
+    footLength,
+    instepWidth,
+    ballWidth,
   } : null;
 
   return { hip, leg, legOffset, foot };
@@ -361,34 +155,7 @@ export function resolveLowerBodyLandmarks(R: R, totalHeight: number): LowerBodyR
 
 // ── Path builders ─────────────────────────────────────────────────────────────
 
-function crPath(pts: [number, number][], startWithM = true): string {
-  if (pts.length < 2) return '';
-  let d = startWithM ? `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}` : '';
-  for (let i = 0; i < pts.length - 1; i++) {
-    const p0 = pts[Math.max(0, i - 1)];
-    const p1 = pts[i];
-    const p2 = pts[i + 1];
-    const p3 = pts[Math.min(pts.length - 1, i + 2)];
-    d +=
-      ` C ${(p1[0] + (p2[0] - p0[0]) / 6).toFixed(1)} ${(p1[1] + (p2[1] - p0[1]) / 6).toFixed(1)}` +
-      ` ${(p2[0] - (p3[0] - p1[0]) / 6).toFixed(1)} ${(p2[1] - (p3[1] - p1[1]) / 6).toFixed(1)}` +
-      ` ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
-  }
-  return d;
-}
-
-export interface LowerBodyPathOptions {
-  axisX: number;
-  toY: (h: number) => number;
-  scale: number;
-  fill: string;
-  fillOpacity?: number;
-  stroke: string;
-  strokeWidth?: number;
-  strokeOpacity?: number;
-}
-
-export function buildHipPath(hip: LowerBodyLandmark[], opts: LowerBodyPathOptions): string {
+export function buildHipPath(hip: Landmark[], opts: PathOptions): string {
   const { axisX, toY, scale, fill, stroke } = opts;
   const fillOpacity   = opts.fillOpacity   ?? 0.22;
   const strokeWidth   = opts.strokeWidth   ?? 1.5;
@@ -401,10 +168,10 @@ export function buildHipPath(hip: LowerBodyLandmark[], opts: LowerBodyPathOption
 }
 
 export function buildLegPaths(
-  leg: LowerBodyLandmark[],
+  leg: Landmark[],
   legOffset: number,
-  crotch: LowerBodyLandmark | null,
-  opts: LowerBodyPathOptions,
+  crotch: Landmark | null,
+  opts: PathOptions,
 ): string {
   const { axisX, toY, scale, fill, stroke } = opts;
   const fillOpacity   = opts.fillOpacity   ?? 0.22;
@@ -415,7 +182,6 @@ export function buildLegPaths(
   function oneLeg(cx: number): string {
     const thighHalfW = (leg[0]?.halfW ?? 0) * scale;
     const right: [number, number][] = leg.map(l => [cx + (l.halfW ?? 0) * scale, toY(l.y!)]);
-    // Prepend crotch Y at thigh-upper width so the leg connects to the hip block
     if (crotch?.y != null) right.unshift([cx + thighHalfW, toY(crotch.y)]);
     const left: [number, number][] = [...right].reverse().map(([x, y]) => [2 * cx - x, y]);
     const d = crPath(right) + ` L ${left[0][0].toFixed(1)} ${left[0][1].toFixed(1)}` + crPath(left, false) + ' Z';
@@ -426,42 +192,56 @@ export function buildLegPaths(
 }
 
 export function buildFootPaths(
-  ankleLm: LowerBodyLandmark,
-  foot: LowerBodyLandmark,
+  ankleLm: Landmark,
+  foot: FootResolved,
   legOffset: number,
-  opts: LowerBodyPathOptions,
+  opts: PathOptions,
 ): string {
-  if (ankleLm.y === null || ankleLm.halfW === null || foot.halfW === null) return '';
+  if (ankleLm.y === null || ankleLm.halfW === null) return '';
   const { axisX, toY, scale, fill, stroke } = opts;
   const fillOpacity   = opts.fillOpacity   ?? 0.22;
   const strokeWidth   = opts.strokeWidth   ?? 1.5;
   const strokeOpacity = opts.strokeOpacity ?? 0.55;
 
-  const ox       = legOffset * scale;
-  const ankleY   = toY(ankleLm.y);
-  const floorY   = toY(0);
-  const ankleHW  = ankleLm.halfW * scale;
-  const footHW   = foot.halfW * scale;
+  const ox        = legOffset * scale;
+  const ankleY    = toY(ankleLm.y);
+  const floorY    = toY(0);
 
-  // One foot: cx = leg center, sign = +1 for right foot (toes point right), -1 for left
+  const ankleHW  = ankleLm.halfW * scale;
+  const footL    = foot.footLength * scale;
+  const instepH  = foot.instepWidth * scale;
+  const ballH    = foot.ballWidth * scale;
+
   function oneFoot(cx: number, sign: number): string {
-    // Four key points, clockwise:
-    // inner ankle → heel (inward at floor) → toe (outward at floor) → outer ankle
-    const pts: [number, number][] = [
-      [cx - sign * ankleHW, ankleY],          // inner ankle
-      [cx - sign * ankleHW * 0.5, floorY],    // heel (slightly inward)
-      [cx + sign * footHW,        floorY],     // toe tip (fans outward)
-      [cx + sign * ankleHW,       ankleY],     // outer ankle
-    ];
+    // 1. Horizontal Coordinates (respecting direction via 'sign')
+    const xHeel       = cx - sign * ankleHW;
+    const xFrontAnkle = cx + sign * ankleHW;
+    const xToe        = xHeel + sign * footL; // Total length maps exactly from heel line
+
+    // Proportionally place anatomical landmarks along the foot profile
+    const xInstep     = xHeel + sign * (footL * 0.35); // Instep sits around 35% forward
+    const xBall       = xHeel + sign * (footL * 0.75); // Ball sits around 75% forward
+
+    // 2. Vertical Coordinates (SVG Y-axis goes downwards)
+    const yAnkle      = ankleY;
+    const yInstep     = floorY - instepH;
+    const yBall       = floorY - ballH;
+    const yToeTop     = floorY - (ballH * 0.25); // Slightly tapered toe box
+    const yFloor      = floorY;
+
+    // 3. Constructing the Path
     const d =
-      `M ${pts[0][0].toFixed(1)} ${pts[0][1].toFixed(1)}` +
-      ` C ${pts[0][0].toFixed(1)} ${(ankleY + (floorY - ankleY) * 0.5).toFixed(1)}` +
-        ` ${pts[1][0].toFixed(1)} ${floorY.toFixed(1)} ${pts[1][0].toFixed(1)} ${floorY.toFixed(1)}` +
-      ` C ${((pts[1][0] + pts[2][0]) / 2).toFixed(1)} ${floorY.toFixed(1)}` +
-        ` ${((pts[1][0] + pts[2][0]) / 2).toFixed(1)} ${floorY.toFixed(1)} ${pts[2][0].toFixed(1)} ${floorY.toFixed(1)}` +
-      ` C ${pts[2][0].toFixed(1)} ${floorY.toFixed(1)}` +
-        ` ${pts[3][0].toFixed(1)} ${(ankleY + (floorY - ankleY) * 0.5).toFixed(1)} ${pts[3][0].toFixed(1)} ${ankleY.toFixed(1)}` +
-      ' Z';
+      `M ${xHeel.toFixed(1)} ${yAnkle.toFixed(1)}` +                             // Start at back ankle line
+      ` L ${xFrontAnkle.toFixed(1)} ${yAnkle.toFixed(1)}` +                       // Line to front ankle bridge
+      ` C ${xFrontAnkle.toFixed(1)} ${yInstep.toFixed(1)}, ` +
+        `${xInstep.toFixed(1)} ${yInstep.toFixed(1)}, ` +
+        `${xBall.toFixed(1)} ${yBall.toFixed(1)}` +                              // Smooth curve through instep down to ball height
+      ` Q ${((xBall + xToe) / 2).toFixed(1)} ${yBall.toFixed(1)}, ` +
+        `${xToe.toFixed(1)} ${yToeTop.toFixed(1)}` +                             // Smooth transition over the toe box
+      ` L ${xToe.toFixed(1)} ${yFloor.toFixed(1)}` +                             // Drop to toe tip floor
+      ` L ${xHeel.toFixed(1)} ${yFloor.toFixed(1)}` +                            // Run flat along the ground to heel
+      ` Z`;                                                                      // Close back up the Achilles heel line
+
     return `<path d="${d}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}" stroke-linejoin="round"/>`;
   }
 

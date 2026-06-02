@@ -45,6 +45,7 @@
     .badge.direct   { background: #14532d; color: #4ade80; }
     .badge.arc      { background: #713f12; color: #facc15; }
     .badge.circ     { background: #7c2d12; color: #fb923c; }
+    .badge.derived  { background: #3b0764; color: #c084fc; }
     .badge.canonical{ background: #27272a; color: #52525b; }
 
     .legend { display: flex; gap: 12px; align-items: center; }
@@ -109,6 +110,7 @@ const FULL = {
   bustpoint_to_bustpoint: 7,
   across_chest_f: 13,
   armfold_to_armfold_f: 12.5,
+  shoulder_tip_to_armfold_f: 5.2,
   arm_shoulder_tip_to_armfold_line: 5.0,
   // lower body
   height_highhip: 36,
@@ -173,7 +175,7 @@ let CASES = [
 const PAD = 20, BODY_H = 420, AXIS_X = 160;
 
 function clrFor(c) {
-  return c === 'direct' ? '#4ade80' : c === 'arc' ? '#facc15' : c === 'circ' ? '#fb923c' : '#52525b';
+  return c === 'direct' ? '#4ade80' : c === 'arc' ? '#facc15' : c === 'circ' ? '#fb923c' : c === 'derived' ? '#c084fc' : '#52525b';
 }
 
 function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH) {
@@ -183,7 +185,12 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
     resolved.neckline?.side,
     resolved.neckline?.front,
   ].filter(Boolean);
-  const allLandmarks = [...neckLandmarks, ...outline, ...interior, ...lowerResolved.hip, ...lowerResolved.leg, ...armResolved.landmarks, ...headResolved.landmarks];
+  const allLandmarks = [
+    ...neckLandmarks, ...outline, ...interior,
+    ...lowerResolved.hip, ...lowerResolved.leg,
+    ...(lowerResolved.foot ? [lowerResolved.foot] : []),
+    ...armResolved.landmarks, ...headResolved.landmarks
+  ];
   const scale = BODY_H / totalH;
   const toY = h => PAD + (totalH - h) * scale;
   // Widen canvas to fit both arms
@@ -292,6 +299,19 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
     </g>`;
   }).join('');
 
+  const footGuide = (lowerResolved.foot) ? (() => {
+    const l = lowerResolved.foot;
+    const y  = toY(0).toFixed(1);
+    const fl = (l.footLength * scale);
+    const clr = clrFor(l.widthConfidence);
+    const ox = lowerResolved.legOffset * scale;
+    return `<g class="lm-hit" data-id="foot">
+      <line x1="${AXIS_X + ox}" y1="${y}" x2="${AXIS_X + ox + fl}" y2="${y}" stroke="${clr}" stroke-width="1.5" stroke-opacity="0.8"/>
+      <line x1="${AXIS_X - ox}" y1="${y}" x2="${AXIS_X - ox - fl}" y2="${y}" stroke="${clr}" stroke-width="1.5" stroke-opacity="0.8"/>
+      <text x="${AXIS_X + ox + fl + 5}" y="${+y - 4}" font-size="9" fill="${clr}">foot</text>
+    </g>`;
+  })() : '';
+
   function buildArmGuideLines(lms, prefix, labelAnchor) {
     return lms.map((l, i, arr) => {
       const sx = AXIS_X + l.x * scale;
@@ -340,7 +360,7 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
 
   const floor = `<line x1="0" y1="${PAD + BODY_H}" x2="${svgW}" y2="${PAD + BODY_H}" stroke="#3f3f46" stroke-width="1"/>`;
 
-  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${hipOutlineSvg}${legOutlineSvg}${footSvg}${armSvg}${rightArmSvg}${headSvg}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}${hipGuideLines}${legGuideLines}${armGuideLines}${rightArmGuideLines}${headGuideLines}</svg>`, allLandmarks, rightArmResolved };
+  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${hipOutlineSvg}${legOutlineSvg}${footSvg}${armSvg}${rightArmSvg}${headSvg}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}${hipGuideLines}${legGuideLines}${footGuide}${armGuideLines}${rightArmGuideLines}${headGuideLines}</svg>`, allLandmarks, rightArmResolved };
 }
 
 function buildDetailPanel(landmark) {
@@ -368,12 +388,21 @@ function buildDetailPanel(landmark) {
     }).join('');
   }
 
+  const extra = (landmark.id === 'foot') ? `
+    <div style="margin-top:12px; padding-top:8px; border-top:1px solid #27272a; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div><div class="section-label">Length</div><div style="color:#e4e4e7">${landmark.footLength.toFixed(1)}</div></div>
+      <div><div class="section-label">Instep Width</div><div style="color:#e4e4e7">${landmark.instepWidth.toFixed(1)}</div></div>
+      <div><div class="section-label">Ball Width</div><div style="color:#e4e4e7">${landmark.ballWidth.toFixed(1)}</div></div>
+    </div>
+  ` : '';
+
   return `
     <div class="detail-id">${landmark.id}</div>
     <div class="section-label">Height (Y) candidates</div>
     ${candidateTable(landmark.yCandidates, 'h')}
     <div class="section-label">Width candidates</div>
     ${candidateTable(landmark.wCandidates, 'w')}
+    ${extra}
   `;
 }
 
@@ -387,7 +416,8 @@ legendEl.className = 'legend';
 legendEl.innerHTML = [
   ['#14532d','#4ade80','direct measurement'],
   ['#713f12','#facc15','arc projection'],
-  ['#7c2d12','#fb923c','circumference ÷ 2π'],
+  ['#7c2d12','#fb923c','circumference ÷ π'],
+  ['#3b0764','#c084fc','derived (e.g. length)'],
   ['#27272a','#52525b','canonical fallback'],
 ].map(([bg,fg,label]) =>
   `<div class="legend-item"><div class="swatch" style="background:${bg};outline:1px solid ${fg}"></div>${label}</div>`
@@ -498,6 +528,7 @@ function renderAll() {
         const clr = clrFor(l.widthConfidence);
         return `<div class="lm-list-item" data-id="${l.id}" style="border-left:2px solid ${clr}">${l.id}</div>`;
       }).join('') +
+      (lowerResolved.foot ? `<div class="lm-list-item" data-id="foot" style="border-left:2px solid ${clrFor(lowerResolved.foot.widthConfidence)}">foot</div>` : '') +
       // Left arm
       (armResolved.landmarks.length ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
       `<div style="color:#52525b;font-size:9px;padding:2px 4px;text-transform:uppercase;letter-spacing:.05em">left arm</div>` +
