@@ -153,7 +153,9 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   };
 
   const paths: string[] = [];
-  paths.push(`<line x1="${axisX}" y1="${pad}" x2="${axisX}" y2="${pad + bodyHeight}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>`);
+  if (showGuideTicks) {
+    paths.push(`<line x1="${axisX}" y1="${pad}" x2="${axisX}" y2="${pad + bodyHeight}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>`);
+  }
 
   paths.push(buildHipPath(figure.lowerBody.hip, pathOpts));
   const crotch = figure.lowerBody.hip.find(landmark => landmark.id === 'crotch') ?? null;
@@ -322,16 +324,24 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
 
   guides.forEach(guide => {
     if (guide.lane === 'inline') {
-      if (!showGuideLabels) return;
-      paths.push(`<g class="figure-guide">${guide.segments}<text class="figure-guide-label" data-landmark-id="${escXml(guide.label)}" x="${axisX.toFixed(1)}" y="${(guide.anchorY - 3).toFixed(1)}" fill="${guide.color}" stroke="#ffffff" stroke-width="2.5" paint-order="stroke" font-size="8" font-family="ui-monospace, monospace" text-anchor="middle">${escXml(guide.label)}</text></g>`);
+      const labelHtml = showGuideLabels
+        ? `<text class="figure-guide-label" data-landmark-id="${escXml(guide.label)}" x="${axisX.toFixed(1)}" y="${(guide.anchorY - 3).toFixed(1)}" fill="${guide.color}" stroke="#ffffff" stroke-width="2.5" paint-order="stroke" font-size="8" font-family="ui-monospace, monospace" text-anchor="middle">${escXml(guide.label)}</text>`
+        : '';
+      if (guide.segments || labelHtml) {
+        paths.push(`<g class="figure-guide">${guide.segments}${labelHtml}</g>`);
+      }
       return;
     }
-    if (!showGuideLabels) return;
     const labelY = labels.get(guide) ?? guide.anchorY;
     const labelX = guide.side === 'left' ? leftLabelX : rightLabelX;
     const elbowX = guide.side === 'left' ? labelX + 8 : labelX - 8;
     const textAnchor = guide.side === 'left' ? 'end' : 'start';
-    paths.push(`<g class="figure-guide">${guide.segments}<polyline points="${guide.anchorX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${labelY.toFixed(1)} ${labelX.toFixed(1)},${labelY.toFixed(1)}" fill="none" stroke="${guide.color}" stroke-width="0.8"/><text class="figure-guide-label" data-landmark-id="${escXml(guide.label)}" x="${labelX.toFixed(1)}" y="${(labelY + 3).toFixed(1)}" fill="${guide.color}" font-size="8" font-family="ui-monospace, monospace" text-anchor="${textAnchor}">${escXml(guide.label)}</text></g>`);
+    const leaderHtml = showGuideLabels
+      ? `<polyline points="${guide.anchorX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${guide.anchorY.toFixed(1)} ${elbowX.toFixed(1)},${labelY.toFixed(1)} ${labelX.toFixed(1)},${labelY.toFixed(1)}" fill="none" stroke="${guide.color}" stroke-width="0.8"/><text class="figure-guide-label" data-landmark-id="${escXml(guide.label)}" x="${labelX.toFixed(1)}" y="${(labelY + 3).toFixed(1)}" fill="${guide.color}" font-size="8" font-family="ui-monospace, monospace" text-anchor="${textAnchor}">${escXml(guide.label)}</text>`
+      : '';
+    if (guide.segments || leaderHtml) {
+      paths.push(`<g class="figure-guide">${guide.segments}${leaderHtml}</g>`);
+    }
   });
 
   const viewMinX = leftLabelX - labelWidth;

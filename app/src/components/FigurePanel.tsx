@@ -31,7 +31,7 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
   const figureHtml = useMemo(
     () => doc ? renderFigure(doc, {
       skinColor,
-      showGuideLabels: !(hideLabel || hideGuideline),
+      showGuideLabels: !hideLabel,
       showGuideTicks: !hideGuideline,
     }) : null,
     [doc, skinColor, hideLabel, hideGuideline],
