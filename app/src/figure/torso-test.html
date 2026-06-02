@@ -79,6 +79,9 @@
 <body>
 <script type="module">
 import { resolveTorsoLandmarks, buildTorsoPath, buildNeckBackLines, buildNecklineCurve, buildBustpointMark } from './torso.ts';
+import { resolveLowerBodyLandmarks, buildHipPath, buildLegPaths, buildFootPaths } from './lower-body.ts';
+import { resolveLeftArmLandmarks, resolveRightArmLandmarks, buildArmPath } from './arm.ts';
+import { resolveHeadLandmarks, buildHeadPath } from './head.ts';
 import { parseSmis } from '@seamlyme/core';
 
 const FULL = {
@@ -91,7 +94,10 @@ const FULL = {
   height_waist_side: 40,
   height_neck_back: 57.5,
   height_neck_side: 57,
-  height_neck_front: 55.5,
+  head_length: 9,
+  head_width: 6,
+  head_circ: 22,
+  head_crown_to_neck_back: 8,
   head_chin_to_neck_back: 6,
   shoulder_tip_to_shoulder_tip_f: 15,
   neck_width: 5,
@@ -102,6 +108,49 @@ const FULL = {
   waist_arc_f: 13.5,
   bustpoint_to_bustpoint: 7,
   across_chest_f: 13,
+  armfold_to_armfold_f: 12.5,
+  arm_shoulder_tip_to_armfold_line: 5.0,
+  // lower body
+  height_highhip: 36,
+  height_hip: 31.5,
+  height_gluteal_fold: 30,
+  height_knee: 17.5,
+  height_calf: 11,
+  height_ankle_high: 4,
+  height_ankle: 2.5,
+  highhip_arc_f: 17,
+  hip_arc_f: 20,
+  leg_thigh_upper_circ: 22,
+  leg_thigh_mid_circ: 19.5,
+  leg_knee_circ: 15,
+  leg_knee_small_circ: 13,
+  leg_calf_circ: 14,
+  leg_ankle_high_circ: 10,
+  leg_ankle_circ: 9,
+  foot_width: 3.5,
+  foot_length: 9.5,
+  foot_circ: 9,
+  foot_instep_circ: 13,
+  // arm — bent (L01–L04, left arm)
+  arm_shoulder_tip_to_wrist_bent: 24,
+  arm_shoulder_tip_to_elbow_bent: 14.5,
+  arm_elbow_to_wrist_bent: 9.5,
+  arm_elbow_circ_bent: 12,
+  // arm — straight (L05–L07, right arm)
+  arm_shoulder_tip_to_wrist: 22,
+  arm_shoulder_tip_to_elbow: 13.5,
+  arm_elbow_to_wrist: 8.5,
+  arm_upper_circ: 13,
+  arm_above_elbow_circ: 12,
+  arm_elbow_circ: 12,
+  arm_lower_circ: 10,
+  arm_wrist_circ: 6.25,
+  // hand
+  hand_palm_length: 4.5,
+  hand_length: 7,
+  hand_palm_width: 3.5,
+  hand_palm_circ: 8,
+  hand_circ: 9,
 };
 
 const ARCS_ONLY = { ...FULL };
@@ -110,6 +159,9 @@ const MINIMAL = {
   height: 65,
   height_bustpoint: 45,
   height_waist_side: 40,
+  height_hip: 31.5,
+  height_knee: 17.5,
+  height_ankle: 2.5,
 };
 
 let CASES = [
@@ -118,26 +170,46 @@ let CASES = [
   { label: 'Minimal',           R: MINIMAL },
 ];
 
-const PAD = 20, BODY_H = 420, AXIS_X = 80;
+const PAD = 20, BODY_H = 420, AXIS_X = 160;
 
 function clrFor(c) {
   return c === 'direct' ? '#4ade80' : c === 'arc' ? '#facc15' : c === 'circ' ? '#fb923c' : '#52525b';
 }
 
-function buildSvg(resolved, totalH) {
+function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH) {
   const { outline, interior } = resolved;
   const neckLandmarks = [
     resolved.neckBack,
     resolved.neckline?.side,
     resolved.neckline?.front,
   ].filter(Boolean);
-  const allLandmarks = [...neckLandmarks, ...outline, ...interior];
+  const allLandmarks = [...neckLandmarks, ...outline, ...interior, ...lowerResolved.hip, ...lowerResolved.leg, ...armResolved.landmarks, ...headResolved.landmarks];
   const scale = BODY_H / totalH;
   const toY = h => PAD + (totalH - h) * scale;
-  const svgW = AXIS_X * 2 + 40, svgH = BODY_H + PAD * 2;
-  const pathOpts = { axisX: AXIS_X, toY, scale, fill: '#f2c6a0', stroke: '#8a5a44', fillOpacity: 0.18, strokeOpacity: 0.6 };
+  // Widen canvas to fit both arms
+  const minArmX = Math.min(...armResolved.landmarks.map(l => AXIS_X + l.x * scale)) - 20;
+  const maxArmX = Math.max(...rightArmResolved.landmarks.map(l => AXIS_X + l.x * scale)) + 20;
+  const leftPad  = Math.max(0, -minArmX);
+  const rightPad = Math.max(0, maxArmX - (AXIS_X * 2));
+  const svgW = AXIS_X * 2 + 80 + leftPad + rightPad, svgH = BODY_H + PAD * 2;
+  const pathOpts     = { axisX: AXIS_X, toY, scale, fill: '#f2c6a0', stroke: '#8a5a44', fillOpacity: 0.18, strokeOpacity: 0.6 };
+  const armOpts      = { axisX: AXIS_X, toY, scale, fill: '#f2c6a0', stroke: '#8a5a44', fillOpacity: 0.18, strokeOpacity: 0.6 };
+  const rightArmOpts = { axisX: AXIS_X, toY, scale, fill: '#f2c6a0', stroke: '#8a5a44', fillOpacity: 0.18, strokeOpacity: 0.6, flipNormals: true, capSweep: 0 };
+  const hipOpts  = { axisX: AXIS_X, toY, scale, fill: '#a0c4f2', stroke: '#3a5a8a', fillOpacity: 0.18, strokeOpacity: 0.6 };
+  const legOpts  = { axisX: AXIS_X, toY, scale, fill: '#a0c4f2', stroke: '#3a5a8a', fillOpacity: 0.18, strokeOpacity: 0.6 };
 
-  const outlineSvg = buildTorsoPath(outline, pathOpts);
+  const headOpts     = { axisX: AXIS_X, toY, scale, fill: '#f2c6a0', stroke: '#8a5a44', fillOpacity: 0.18, strokeOpacity: 0.6 };
+  const headSvg      = buildHeadPath(headResolved, headOpts);
+  const armSvg      = buildArmPath(armResolved, armOpts);
+  const rightArmSvg = buildArmPath(rightArmResolved, rightArmOpts);
+  const outlineSvg     = buildTorsoPath(outline, pathOpts);
+  const hipOutlineSvg  = buildHipPath(lowerResolved.hip, hipOpts);
+  const crotchLm       = lowerResolved.hip.find(l => l.id === 'crotch') ?? null;
+  const ankleLm        = lowerResolved.leg.find(l => l.id === 'ankle') ?? null;
+  const legOutlineSvg  = buildLegPaths(lowerResolved.leg, lowerResolved.legOffset, crotchLm, legOpts);
+  const footSvg        = (ankleLm && lowerResolved.foot)
+    ? buildFootPaths(ankleLm, lowerResolved.foot, lowerResolved.legOffset, legOpts)
+    : '';
 
   const neckBackLinesSvg = (resolved.neckline && resolved.neckBack)
     ? buildNeckBackLines(resolved.neckline.side, resolved.neckBack, { ...pathOpts, color: '#71717a' })
@@ -186,9 +258,89 @@ function buildSvg(resolved, totalH) {
     </g>`;
   }).join('');
 
+  // Hip guide lines — symmetric, same as torso
+  const hipGuideLines = lowerResolved.hip.map(l => {
+    const y  = toY(l.y).toFixed(1);
+    const hw = ((l.halfW ?? 0) * scale).toFixed(1);
+    const clr = clrFor(l.widthConfidence);
+    return `<g class="lm-hit" data-id="${l.id}">
+      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
+      <circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}" opacity="0.7"/>
+      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+    </g>`;
+  }).join('');
+
+  // Leg guide lines — two ticks per landmark (one per leg)
+  const ox = lowerResolved.legOffset * scale;
+  const legGuideLines = lowerResolved.leg.map(l => {
+    const y   = toY(l.y).toFixed(1);
+    const hw  = ((l.halfW ?? 0) * scale);
+    const clr = clrFor(l.widthConfidence);
+    // right leg tick
+    const rlx = (AXIS_X + ox - hw).toFixed(1);
+    const rrx = (AXIS_X + ox + hw).toFixed(1);
+    // left leg tick (mirror)
+    const llx = (AXIS_X - ox - hw).toFixed(1);
+    const lrx = (AXIS_X - ox + hw).toFixed(1);
+    return `<g class="lm-hit" data-id="${l.id}">
+      <line x1="${llx}" y1="${y}" x2="${lrx}" y2="${y}" stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
+      <line x1="${rlx}" y1="${y}" x2="${rrx}" y2="${y}" stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
+      <circle cx="${(AXIS_X + ox).toFixed(1)}" cy="${y}" r="2" fill="${clr}" opacity="0.7"/>
+      <circle cx="${(AXIS_X - ox).toFixed(1)}" cy="${y}" r="2" fill="${clr}" opacity="0.7"/>
+      <text x="${+rrx + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+    </g>`;
+  }).join('');
+
+  function buildArmGuideLines(lms, prefix, labelAnchor) {
+    return lms.map((l, i, arr) => {
+      const sx = AXIS_X + l.x * scale;
+      const sy = toY(l.y);
+      const hw = l.halfW * scale;
+      const prev = arr[Math.max(0, i - 1)];
+      const next = arr[Math.min(arr.length - 1, i + 1)];
+      const tdx = (AXIS_X + next.x * scale) - (AXIS_X + prev.x * scale);
+      const tdy = toY(next.y) - toY(prev.y);
+      const tlen = Math.sqrt(tdx * tdx + tdy * tdy) || 1;
+      const nx = -tdy / tlen;
+      const ny =  tdx / tlen;
+      const x1 = (sx - nx * hw).toFixed(1);
+      const y1 = (sy - ny * hw).toFixed(1);
+      const x2 = (sx + nx * hw).toFixed(1);
+      const y2 = (sy + ny * hw).toFixed(1);
+      const clr = clrFor(l.widthConfidence);
+      const key = `${prefix}${l.id}`;
+      // Label on the outer side
+      const lx = labelAnchor === 'left' ? (+x1 - 3).toFixed(1) : (+x2 + 3).toFixed(1);
+      const anchor = labelAnchor === 'left' ? 'end' : 'start';
+      const ly = labelAnchor === 'left' ? (+y1 + 4).toFixed(1) : (+y2 + 4).toFixed(1);
+      return `<g class="lm-hit" data-id="${key}">
+        <line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"
+              stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
+        <circle cx="${sx.toFixed(1)}" cy="${sy.toFixed(1)}" r="2.5" fill="${clr}" opacity="0.7"/>
+        <text x="${lx}" y="${ly}" font-size="9" fill="${clr}" text-anchor="${anchor}">${l.id}</text>
+      </g>`;
+    }).join('');
+  }
+
+  const headGuideLines = headResolved.landmarks.map(l => {
+    const y  = toY(l.y).toFixed(1);
+    const hw = (l.halfW * scale).toFixed(1);
+    const clr = clrFor(l.widthConfidence);
+    return `<g class="lm-hit" data-id="${l.id}">
+      <line x1="${AXIS_X - +hw}" y1="${y}" x2="${AXIS_X + +hw}" y2="${y}"
+            stroke="${clr}" stroke-width="1.2" stroke-opacity="0.55" stroke-dasharray="3 2"/>
+      <circle cx="${AXIS_X}" cy="${y}" r="2.5" fill="${clr}" opacity="0.7"/>
+      <text x="${AXIS_X + +hw + 5}" y="${+y + 4}" font-size="9" fill="${clr}">${l.id}</text>
+    </g>`;
+  }).join('');
+
+  const armGuideLines      = buildArmGuideLines(armResolved.landmarks,      'l-', 'left');
+  const rightArmGuideLines = buildArmGuideLines(rightArmResolved.landmarks, 'r-', 'right');
+
   const floor = `<line x1="0" y1="${PAD + BODY_H}" x2="${svgW}" y2="${PAD + BODY_H}" stroke="#3f3f46" stroke-width="1"/>`;
 
-  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}</svg>`, allLandmarks };
+  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${hipOutlineSvg}${legOutlineSvg}${footSvg}${armSvg}${rightArmSvg}${headSvg}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}${hipGuideLines}${legGuideLines}${armGuideLines}${rightArmGuideLines}${headGuideLines}</svg>`, allLandmarks, rightArmResolved };
 }
 
 function buildDetailPanel(landmark) {
@@ -286,7 +438,14 @@ function renderAll() {
   for (const { label, R } of CASES) {
     const totalH = R.height > 0 ? R.height : 65;
     const resolved = resolveTorsoLandmarks(R, totalH);
-    const { html: svgHtml, allLandmarks } = buildSvg(resolved, totalH);
+    const lowerResolved = resolveLowerBodyLandmarks(R, totalH);
+    const shoulderLm = resolved.outline.find(l => l.id === 'shoulder');
+    const shoulderTipX = shoulderLm ? (shoulderLm.halfW ?? 0) : totalH * 0.115;
+    const shoulderTipY = shoulderLm?.y ?? totalH * 0.831;
+    const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, totalH);
+    const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, totalH);
+    const headResolved = resolveHeadLandmarks(R, totalH);
+    const { html: svgHtml, allLandmarks, rightArmResolved: rArm } = buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH);
 
     const caseEl = document.createElement('div');
     caseEl.className = 'case';
@@ -304,6 +463,11 @@ function renderAll() {
     ].join('');
 
     listEl.innerHTML =
+      headResolved.landmarks.map(l => {
+        const clr = clrFor(l.widthConfidence);
+        return `<div class="lm-list-item" data-id="${l.id}" style="border-left:2px solid ${clr}">${l.id}</div>`;
+      }).join('') +
+      `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` +
       neckItems +
       (neckItems ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
       resolved.outline.filter(l => !l.id.startsWith('neck')).map(l => {
@@ -313,7 +477,39 @@ function renderAll() {
       (resolved.interior.length ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
       resolved.interior.map(l =>
         `<div class="lm-list-item" data-id="${l.id}" style="border-left:2px solid #fc8d62">${l.id}</div>`
-      ).join('');
+      ).join('') +
+      (lowerResolved.hip.length ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      lowerResolved.hip.map(l => {
+        const clr = clrFor(l.widthConfidence);
+        return `<div class="lm-list-item" data-id="${l.id}" style="border-left:2px solid ${clr}">${l.id}</div>`;
+      }).join('') +
+      (lowerResolved.leg.length ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      lowerResolved.leg.map(l => {
+        const clr = clrFor(l.widthConfidence);
+        return `<div class="lm-list-item" data-id="${l.id}" style="border-left:2px solid ${clr}">${l.id}</div>`;
+      }).join('') +
+      // Left arm
+      (armResolved.landmarks.length ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      `<div style="color:#52525b;font-size:9px;padding:2px 4px;text-transform:uppercase;letter-spacing:.05em">left arm</div>` +
+      armResolved.landmarks.filter(l => l.section === 'arm').map(l => {
+        const clr = clrFor(l.widthConfidence);
+        return `<div class="lm-list-item" data-id="l-${l.id}" style="border-left:2px solid ${clr}">${l.id}</div>`;
+      }).join('') +
+      (armResolved.landmarks.some(l => l.section === 'hand') ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      armResolved.landmarks.filter(l => l.section === 'hand').map(l => {
+        return `<div class="lm-list-item" data-id="l-${l.id}" style="border-left:2px solid #c084fc">${l.id}</div>`;
+      }).join('') +
+      // Right arm
+      (rArm.landmarks.length ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      `<div style="color:#52525b;font-size:9px;padding:2px 4px;text-transform:uppercase;letter-spacing:.05em">right arm</div>` +
+      rArm.landmarks.filter(l => l.section === 'arm').map(l => {
+        const clr = clrFor(l.widthConfidence);
+        return `<div class="lm-list-item" data-id="r-${l.id}" style="border-left:2px solid ${clr}">${l.id}</div>`;
+      }).join('') +
+      (rArm.landmarks.some(l => l.section === 'hand') ? `<div style="border-top:1px solid #27272a;margin:4px 0"></div>` : '') +
+      rArm.landmarks.filter(l => l.section === 'hand').map(l => {
+        return `<div class="lm-list-item" data-id="r-${l.id}" style="border-left:2px solid #c084fc">${l.id}</div>`;
+      }).join('');
 
     const detailEl = document.createElement('div');
     detailEl.className = 'detail';
@@ -324,7 +520,13 @@ function renderAll() {
       leftEl.querySelector(`.lm-hit[data-id="${id}"]`)?.classList.add('selected');
       listEl.querySelectorAll('.lm-list-item.selected').forEach(el => el.classList.remove('selected'));
       listEl.querySelector(`.lm-list-item[data-id="${id}"]`)?.classList.add('selected');
-      detailEl.innerHTML = buildDetailPanel(allLandmarks.find(l => l.id === id));
+      // Right arm landmarks are keyed as 'r-<id>'
+      const lm =
+        id.startsWith('r-')
+          ? rArm.landmarks.find(l => l.id === id.slice(2))
+          : allLandmarks.find(l => l.id === id) ??
+            (id.startsWith('l-') ? allLandmarks.find(l => l.id === id.slice(2)) : undefined);
+      detailEl.innerHTML = buildDetailPanel(lm);
     }
 
     leftEl.querySelector('svg').addEventListener('click', e => {
