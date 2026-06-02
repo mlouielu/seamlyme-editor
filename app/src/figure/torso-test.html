@@ -349,14 +349,21 @@ function buildDetailPanel(landmark) {
   function candidateTable(candidates, prefix) {
     if (!candidates.length) return `<div style="color:#52525b;font-size:11px">no candidates</div>`;
     return candidates.map(c => {
-      const used = c.used;
+      const missing = !!c.missing;
+      const used = c.used && !missing;
+      const icon = missing ? '✗' : used ? '✓' : '·';
+      const iconCls = used ? 'tick' : 'no-tick';
       const badge = prefix === 'w'
-        ? `<span class="badge ${c.confidence ?? ''}">${c.confidence ?? ''}</span>` : '';
-      return `<div class="candidate-row">
-        <span class="${used ? 'tick' : 'no-tick'}">${used ? '✓' : '·'}</span>
+        ? missing
+          ? `<span class="badge canonical" style="background:#1c1c1e;color:#3f3f46">missing</span>`
+          : `<span class="badge ${c.confidence ?? ''}">${c.confidence ?? ''}</span>`
+        : '';
+      const valStr = missing ? '—' : c.value.toFixed(3);
+      return `<div class="candidate-row" style="${missing ? 'opacity:0.45' : ''}">
+        <span class="${iconCls}" style="${missing ? 'color:#3f3f46' : ''}">${icon}</span>
         <span class="src ${used ? 'used' : ''}">${c.source}</span>
         ${badge}
-        <span class="val ${used ? 'used' : ''}">${c.value.toFixed(3)}</span>
+        <span class="val ${used ? 'used' : ''}">${valStr}</span>
       </div>`;
     }).join('');
   }
@@ -421,7 +428,10 @@ function loadFile(file) {
       const doc = parseSmis(e.target.result);
       const R = {};
       for (const [name, m] of Object.entries(doc.measurements)) {
-        R[name] = m.resolved ?? 0;
+        // Only set R[name] when the measurement is actually resolved.
+        // Absent measurements stay undefined so resolvers can distinguish
+        // "not measured" from "measured as 0".
+        if (m.resolved != null) R[name] = m.resolved;
       }
       CASES = [{ label: file.name, R }];
       uploadLabel.textContent = file.name;

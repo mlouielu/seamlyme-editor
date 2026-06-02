@@ -19,6 +19,7 @@ export interface ResolveCandidate {
   source: string;
   value: number;
   used: boolean;
+  missing?: boolean;
 }
 
 export interface HeadLandmark {
@@ -64,9 +65,9 @@ export function resolveHeadLandmarks(R: R, totalHeight: number): HeadResolved {
     directHW ? 'direct' : circHW ? 'circ' : 'canonical';
 
   const wCandidates: ResolveCandidate[] = [
-    ...(R.head_width > 0 ? [{ source: 'head_width / 2', value: directHW, used: wConf === 'direct' }] : []),
-    ...(R.head_circ  > 0 ? [{ source: 'head_circ / (2π)', value: circHW, used: wConf === 'circ' }] : []),
-    { source: `canonical ratio 0.046`, value: canonHW, used: wConf === 'canonical' },
+    { source: 'head_width / 2',      value: directHW, used: wConf === 'direct',    missing: !(R.head_width > 0) },
+    { source: 'head_circ / (2π)',     value: circHW,   used: wConf === 'circ',      missing: !(R.head_circ  > 0) },
+    { source: 'canonical ratio 0.046', value: canonHW, used: wConf === 'canonical' },
   ];
 
   // ── Y candidates ──────────────────────────────────────────────────────────

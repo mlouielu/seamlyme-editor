@@ -37,6 +37,7 @@ export interface ResolveCandidate {
   source: string;   // human-readable formula, e.g. 'height_bustpoint' or 'height_neck_front - neck_front_to_bust_f'
   value: number;    // resolved measurement value in measurement units
   used: boolean;    // true for the candidate that was actually selected
+  missing?: boolean; // true when the underlying measurement is absent from R
 }
 
 export interface TorsoLandmark {
@@ -53,7 +54,7 @@ export interface TorsoLandmark {
 // ── Internal candidate types ───────────────────────────────────────────────────
 
 interface YCandidate { source: string; value: number }
-interface WCandidate { source: string; value: number; confidence: TorsoLandmark['widthConfidence'] }
+interface WCandidate { source: string; value: number; confidence: TorsoLandmark['widthConfidence']; missing?: boolean }
 
 function pickY(candidates: YCandidate[]): { y: number; source: string; all: ResolveCandidate[] } | null {
   if (!candidates.length) return null;
@@ -67,12 +68,13 @@ function pickY(candidates: YCandidate[]): { y: number; source: string; all: Reso
 
 function pickW(candidates: WCandidate[]): { halfW: number; source: string; confidence: TorsoLandmark['widthConfidence']; all: ResolveCandidate[] } | null {
   if (!candidates.length) return null;
-  const used = candidates[0];
+  const idx = candidates.findIndex(c => !c.missing);
+  const used = candidates[idx >= 0 ? idx : candidates.length - 1];
   return {
     halfW: used.value,
     source: used.source,
     confidence: used.confidence,
-    all: candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === 0 })),
+    all: candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === (idx >= 0 ? idx : candidates.length - 1), missing: c.missing })),
   };
 }
 
@@ -91,12 +93,10 @@ function shoulderYCandidates(R: R): YCandidate[] {
 }
 
 function neckWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.neck_width > 0)
-    out.push({ source: 'neck_width / 2', value: R.neck_width * 0.5, confidence: 'direct' });
-  if (R.neck_arc_f > 0)
-    out.push({ source: `neck_arc_f × ${arcRatio.toFixed(3)}`, value: R.neck_arc_f * arcRatio, confidence: 'arc' });
-  return out;
+  return [
+    { source: 'neck_width / 2',                       value: R.neck_width  > 0 ? R.neck_width * 0.5                    : 0, confidence: 'direct', missing: !(R.neck_width  > 0) },
+    { source: `neck_arc_f × ${arcRatio.toFixed(3)}`,  value: R.neck_arc_f  > 0 ? R.neck_arc_f * arcRatio               : 0, confidence: 'arc',    missing: !(R.neck_arc_f  > 0) },
+  ];
 }
 
 function neckBackYCandidates(R: R): YCandidate[] {
@@ -200,79 +200,62 @@ function waistYCandidates(R: R): YCandidate[] {
 // ── Width candidate collectors ────────────────────────────────────────────────
 
 function shoulderWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.shoulder_tip_to_shoulder_tip_f > 0)
-    out.push({ source: 'shoulder_tip_to_shoulder_tip_f / 2', value: R.shoulder_tip_to_shoulder_tip_f * 0.5, confidence: 'direct' });
-  if (R.width_shoulder > 0)
-    out.push({ source: 'width_shoulder / 2', value: R.width_shoulder * 0.5, confidence: 'direct' });
-  return out;
+  return [
+    { source: 'shoulder_tip_to_shoulder_tip_f / 2', value: R.shoulder_tip_to_shoulder_tip_f > 0 ? R.shoulder_tip_to_shoulder_tip_f * 0.5 : 0, confidence: 'direct', missing: !(R.shoulder_tip_to_shoulder_tip_f > 0) },
+    { source: 'width_shoulder / 2',                 value: R.width_shoulder                 > 0 ? R.width_shoulder * 0.5                 : 0, confidence: 'direct', missing: !(R.width_shoulder                 > 0) },
+  ];
 }
 
 function armholeWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.armscye_width > 0)
-    out.push({ source: 'neck_width/2 + armscye_width/2', value: R.armscye_width * 0.5 + (R.neck_width > 0 ? R.neck_width * 0.5 : 0), confidence: 'direct' });
-  if (R.across_chest_f > 0)
-    out.push({ source: 'across_chest_f / 2', value: R.across_chest_f * 0.5, confidence: 'direct' });
-  return out;
+  const neckHW = R.neck_width > 0 ? R.neck_width * 0.5 : 0;
+  return [
+    { source: 'neck_width/2 + armscye_width/2', value: R.armscye_width  > 0 ? R.armscye_width * 0.5 + neckHW : 0, confidence: 'direct', missing: !(R.armscye_width  > 0) },
+    { source: 'across_chest_f / 2',             value: R.across_chest_f > 0 ? R.across_chest_f * 0.5         : 0, confidence: 'direct', missing: !(R.across_chest_f > 0) },
+  ];
 }
 
 function highbustWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.highbust_arc_f > 0)
-    out.push({ source: `highbust_arc_f × ${arcRatio.toFixed(3)}`, value: R.highbust_arc_f * arcRatio, confidence: 'arc' });
-  if (R.highbust_circ > 0)
-    out.push({ source: 'highbust_circ / (2π)', value: R.highbust_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: `highbust_arc_f × ${arcRatio.toFixed(3)}`, value: R.highbust_arc_f > 0 ? R.highbust_arc_f * arcRatio               : 0, confidence: 'arc',  missing: !(R.highbust_arc_f > 0) },
+    { source: 'highbust_circ / (2π)',                     value: R.highbust_circ  > 0 ? R.highbust_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.highbust_circ  > 0) },
+  ];
 }
 
 function bustWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.bust_arc_f > 0)
-    out.push({ source: `bust_arc_f × ${arcRatio.toFixed(3)}`, value: R.bust_arc_f * arcRatio, confidence: 'arc' });
-  if (R.bust_circ > 0)
-    out.push({ source: 'bust_circ / (2π)', value: R.bust_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  if (R.width_bust > 0)
-    out.push({ source: 'width_bust / 2', value: R.width_bust * 0.5, confidence: 'direct' });
-  return out;
+  return [
+    { source: `bust_arc_f × ${arcRatio.toFixed(3)}`, value: R.bust_arc_f > 0 ? R.bust_arc_f * arcRatio               : 0, confidence: 'arc',    missing: !(R.bust_arc_f > 0) },
+    { source: 'bust_circ / (2π)',                     value: R.bust_circ  > 0 ? R.bust_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.bust_circ  > 0) },
+    { source: 'width_bust / 2',                       value: R.width_bust > 0 ? R.width_bust * 0.5                     : 0, confidence: 'direct', missing: !(R.width_bust > 0) },
+  ];
 }
 
 function bustpointWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.bustpoint_to_bustpoint_half > 0)
-    out.push({ source: 'bustpoint_to_bustpoint_half', value: R.bustpoint_to_bustpoint_half, confidence: 'direct' });
-  if (R.bustpoint_to_bustpoint > 0)
-    out.push({ source: 'bustpoint_to_bustpoint / 2', value: R.bustpoint_to_bustpoint * 0.5, confidence: 'direct' });
-  return out;
+  return [
+    { source: 'bustpoint_to_bustpoint_half', value: R.bustpoint_to_bustpoint_half > 0 ? R.bustpoint_to_bustpoint_half       : 0, confidence: 'direct', missing: !(R.bustpoint_to_bustpoint_half > 0) },
+    { source: 'bustpoint_to_bustpoint / 2',  value: R.bustpoint_to_bustpoint      > 0 ? R.bustpoint_to_bustpoint * 0.5      : 0, confidence: 'direct', missing: !(R.bustpoint_to_bustpoint      > 0) },
+  ];
 }
 
 function lowbustWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.lowbust_arc_f > 0)
-    out.push({ source: `lowbust_arc_f × ${arcRatio.toFixed(3)}`, value: R.lowbust_arc_f * arcRatio, confidence: 'arc' });
-  if (R.lowbust_circ > 0)
-    out.push({ source: 'lowbust_circ / (2π)', value: R.lowbust_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: `lowbust_arc_f × ${arcRatio.toFixed(3)}`, value: R.lowbust_arc_f > 0 ? R.lowbust_arc_f * arcRatio               : 0, confidence: 'arc',  missing: !(R.lowbust_arc_f > 0) },
+    { source: 'lowbust_circ / (2π)',                     value: R.lowbust_circ  > 0 ? R.lowbust_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.lowbust_circ  > 0) },
+  ];
 }
 
 function ribWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.rib_arc_f > 0)
-    out.push({ source: `rib_arc_f × ${arcRatio.toFixed(3)}`, value: R.rib_arc_f * arcRatio, confidence: 'arc' });
-  if (R.rib_circ > 0)
-    out.push({ source: 'rib_circ / (2π)', value: R.rib_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: `rib_arc_f × ${arcRatio.toFixed(3)}`, value: R.rib_arc_f > 0 ? R.rib_arc_f * arcRatio               : 0, confidence: 'arc',  missing: !(R.rib_arc_f > 0) },
+    { source: 'rib_circ / (2π)',                     value: R.rib_circ  > 0 ? R.rib_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.rib_circ  > 0) },
+  ];
 }
 
 function waistWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.width_waist > 0)
-    out.push({ source: 'width_waist / 2', value: R.width_waist * 0.5, confidence: 'direct' });
-  if (R.waist_arc_f > 0)
-    out.push({ source: `waist_arc_f × ${arcRatio.toFixed(3)}`, value: R.waist_arc_f * arcRatio, confidence: 'arc' });
-  if (R.waist_circ > 0)
-    out.push({ source: 'waist_circ / (2π)', value: R.waist_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: 'width_waist / 2',                      value: R.width_waist  > 0 ? R.width_waist * 0.5                     : 0, confidence: 'direct', missing: !(R.width_waist  > 0) },
+    { source: `waist_arc_f × ${arcRatio.toFixed(3)}`, value: R.waist_arc_f  > 0 ? R.waist_arc_f * arcRatio                : 0, confidence: 'arc',    missing: !(R.waist_arc_f  > 0) },
+    { source: 'waist_circ / (2π)',                     value: R.waist_circ   > 0 ? R.waist_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.waist_circ   > 0) },
+  ];
 }
 
 // ── Arc-to-width projection ratio ─────────────────────────────────────────────

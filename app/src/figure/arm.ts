@@ -47,6 +47,7 @@ export interface ResolveCandidate {
   source: string;
   value: number;
   used: boolean;
+  missing?: boolean;
 }
 
 export interface ArmLandmark {
@@ -73,44 +74,36 @@ export interface ArmResolved {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-interface WCand { source: string; value: number; confidence: 'circ' | 'canonical' }
+interface WCand { source: string; value: number; confidence: 'circ' | 'canonical'; missing?: boolean }
 
 function pickW(cands: WCand[]): { halfW: number; source: string; confidence: 'circ' | 'canonical'; all: ResolveCandidate[] } | null {
   if (!cands.length) return null;
-  const used = cands[0];
+  const idx = cands.findIndex(c => !c.missing);
+  const used = cands[idx >= 0 ? idx : cands.length - 1];
   return {
     halfW: used.value, source: used.source, confidence: used.confidence,
-    all: cands.map((c, i) => ({ source: c.source, value: c.value, used: i === 0 })),
+    all: cands.map((c, i) => ({ source: c.source, value: c.value, used: i === (idx >= 0 ? idx : cands.length - 1), missing: c.missing })),
   };
 }
 
+// Always included; missing: true when the measurement is absent.
 function circ(val: number, label: string): WCand {
-  return { source: `${label} / (2π)`, value: val * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' };
+  return { source: `${label} / (2π)`, value: val > 0 ? val * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(val > 0) };
 }
 
 // ── Width candidate collectors ────────────────────────────────────────────────
 
-function shoulderWC(R: R):     WCand[] { return R.arm_upper_circ > 0        ? [circ(R.arm_upper_circ,       'arm_upper_circ')]       : []; }
-function upperArmWC(R: R):     WCand[] { return [
-  ...(R.arm_upper_circ > 0       ? [circ(R.arm_upper_circ,      'arm_upper_circ')]      : []),
-  ...(R.arm_above_elbow_circ > 0 ? [circ(R.arm_above_elbow_circ,'arm_above_elbow_circ')]: []),
-]; }
-function aboveElbowWC(R: R):   WCand[] { return [
-  ...(R.arm_above_elbow_circ > 0 ? [circ(R.arm_above_elbow_circ,'arm_above_elbow_circ')]: []),
-  ...(R.arm_upper_circ > 0       ? [circ(R.arm_upper_circ,      'arm_upper_circ')]      : []),
-]; }
-function elbowWC(R: R):        WCand[] { return [
-  ...(R.arm_elbow_circ_bent > 0  ? [circ(R.arm_elbow_circ_bent, 'arm_elbow_circ_bent')] : []),
-  ...(R.arm_elbow_circ > 0       ? [circ(R.arm_elbow_circ,      'arm_elbow_circ')]      : []),
-  ...(R.arm_above_elbow_circ > 0 ? [circ(R.arm_above_elbow_circ,'arm_above_elbow_circ')]: []),
-]; }
-function lowerArmWC(R: R):     WCand[] { return R.arm_lower_circ > 0        ? [circ(R.arm_lower_circ,       'arm_lower_circ')]       : []; }
-function wristWC(R: R):        WCand[] { return R.arm_wrist_circ > 0        ? [circ(R.arm_wrist_circ,       'arm_wrist_circ')]       : []; }
+function shoulderWC(R: R):     WCand[] { return [circ(R.arm_upper_circ, 'arm_upper_circ')]; }
+function upperArmWC(R: R):     WCand[] { return [circ(R.arm_upper_circ, 'arm_upper_circ'), circ(R.arm_above_elbow_circ, 'arm_above_elbow_circ')]; }
+function aboveElbowWC(R: R):   WCand[] { return [circ(R.arm_above_elbow_circ, 'arm_above_elbow_circ'), circ(R.arm_upper_circ, 'arm_upper_circ')]; }
+function elbowWC(R: R):        WCand[] { return [circ(R.arm_elbow_circ_bent, 'arm_elbow_circ_bent'), circ(R.arm_elbow_circ, 'arm_elbow_circ'), circ(R.arm_above_elbow_circ, 'arm_above_elbow_circ')]; }
+function lowerArmWC(R: R):     WCand[] { return [circ(R.arm_lower_circ, 'arm_lower_circ')]; }
+function wristWC(R: R):        WCand[] { return [circ(R.arm_wrist_circ, 'arm_wrist_circ')]; }
 
 function handPalmWC(R: R): WCand[] { return [
-  ...(R.hand_palm_width > 0  ? [{ source: 'hand_palm_width / 2', value: R.hand_palm_width * 0.5, confidence: 'circ' as const }] : []),
-  ...(R.hand_palm_circ > 0   ? [circ(R.hand_palm_circ, 'hand_palm_circ')]  : []),
-  ...(R.hand_circ > 0        ? [circ(R.hand_circ,      'hand_circ')]       : []),
+  { source: 'hand_palm_width / 2', value: R.hand_palm_width > 0 ? R.hand_palm_width * 0.5 : 0, confidence: 'circ', missing: !(R.hand_palm_width > 0) },
+  circ(R.hand_palm_circ, 'hand_palm_circ'),
+  circ(R.hand_circ,      'hand_circ'),
 ]; }
 
 function handTipWC(R: R): WCand[] {

@@ -47,6 +47,7 @@ export interface ResolveCandidate {
   source: string;
   value: number;
   used: boolean;
+  missing?: boolean;
 }
 
 export interface LowerBodyLandmark {
@@ -61,7 +62,7 @@ export interface LowerBodyLandmark {
 }
 
 interface YCandidate { source: string; value: number }
-interface WCandidate { source: string; value: number; confidence: LowerBodyLandmark['widthConfidence'] }
+interface WCandidate { source: string; value: number; confidence: LowerBodyLandmark['widthConfidence']; missing?: boolean }
 
 function pickY(candidates: YCandidate[]): { y: number; source: string; all: ResolveCandidate[] } | null {
   if (!candidates.length) return null;
@@ -75,12 +76,13 @@ function pickY(candidates: YCandidate[]): { y: number; source: string; all: Reso
 
 function pickW(candidates: WCandidate[]): { halfW: number; source: string; confidence: LowerBodyLandmark['widthConfidence']; all: ResolveCandidate[] } | null {
   if (!candidates.length) return null;
-  const used = candidates[0];
+  const idx = candidates.findIndex(c => !c.missing);
+  const used = candidates[idx >= 0 ? idx : candidates.length - 1];
   return {
     halfW: used.value,
     source: used.source,
     confidence: used.confidence,
-    all: candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === 0 })),
+    all: candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === (idx >= 0 ? idx : candidates.length - 1), missing: c.missing })),
   };
 }
 
@@ -142,43 +144,33 @@ function crotchYCandidates(R: R): YCandidate[] {
 // ── Hip section: W candidates ─────────────────────────────────────────────────
 
 function waistWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.width_waist > 0)
-    out.push({ source: 'width_waist / 2', value: R.width_waist * 0.5, confidence: 'direct' });
-  if (R.waist_arc_f > 0)
-    out.push({ source: `waist_arc_f × ${arcRatio.toFixed(3)}`, value: R.waist_arc_f * arcRatio, confidence: 'arc' });
-  if (R.waist_circ > 0)
-    out.push({ source: 'waist_circ / (2π)', value: R.waist_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: 'width_waist / 2',                      value: R.width_waist > 0 ? R.width_waist * 0.5                     : 0, confidence: 'direct', missing: !(R.width_waist > 0) },
+    { source: `waist_arc_f × ${arcRatio.toFixed(3)}`, value: R.waist_arc_f > 0 ? R.waist_arc_f * arcRatio                : 0, confidence: 'arc',    missing: !(R.waist_arc_f > 0) },
+    { source: 'waist_circ / (2π)',                     value: R.waist_circ  > 0 ? R.waist_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.waist_circ  > 0) },
+  ];
 }
 
 function highhipWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.highhip_arc_f > 0)
-    out.push({ source: `highhip_arc_f × ${arcRatio.toFixed(3)}`, value: R.highhip_arc_f * arcRatio, confidence: 'arc' });
-  if (R.highhip_circ > 0)
-    out.push({ source: 'highhip_circ / (2π)', value: R.highhip_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: `highhip_arc_f × ${arcRatio.toFixed(3)}`, value: R.highhip_arc_f > 0 ? R.highhip_arc_f * arcRatio               : 0, confidence: 'arc',  missing: !(R.highhip_arc_f > 0) },
+    { source: 'highhip_circ / (2π)',                     value: R.highhip_circ  > 0 ? R.highhip_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.highhip_circ  > 0) },
+  ];
 }
 
 function hipWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.width_hip > 0)
-    out.push({ source: 'width_hip / 2', value: R.width_hip * 0.5, confidence: 'direct' });
-  if (R.hip_arc_f > 0)
-    out.push({ source: `hip_arc_f × ${arcRatio.toFixed(3)}`, value: R.hip_arc_f * arcRatio, confidence: 'arc' });
-  if (R.hip_circ > 0)
-    out.push({ source: 'hip_circ / (2π)', value: R.hip_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: 'width_hip / 2',                       value: R.width_hip  > 0 ? R.width_hip * 0.5                      : 0, confidence: 'direct', missing: !(R.width_hip  > 0) },
+    { source: `hip_arc_f × ${arcRatio.toFixed(3)}`,  value: R.hip_arc_f  > 0 ? R.hip_arc_f * arcRatio                 : 0, confidence: 'arc',    missing: !(R.hip_arc_f  > 0) },
+    { source: 'hip_circ / (2π)',                      value: R.hip_circ   > 0 ? R.hip_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.hip_circ   > 0) },
+  ];
 }
 
 function crotchWCandidates(R: R, arcRatio: number): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.hip_arc_f > 0)
-    out.push({ source: `hip_arc_f × ${arcRatio.toFixed(3)} × 0.92`, value: R.hip_arc_f * arcRatio * 0.92, confidence: 'arc' });
-  if (R.hip_circ > 0)
-    out.push({ source: 'hip_circ / (2π) × 0.92', value: R.hip_circ * CIRC_TO_HALF_WIDTH * 0.5 * 0.92, confidence: 'circ' });
-  return out;
+  return [
+    { source: `hip_arc_f × ${arcRatio.toFixed(3)} × 0.92`, value: R.hip_arc_f > 0 ? R.hip_arc_f * arcRatio * 0.92                : 0, confidence: 'arc',  missing: !(R.hip_arc_f > 0) },
+    { source: 'hip_circ / (2π) × 0.92',                    value: R.hip_circ  > 0 ? R.hip_circ  * CIRC_TO_HALF_WIDTH * 0.5 * 0.92 : 0, confidence: 'circ', missing: !(R.hip_circ  > 0) },
+  ];
 }
 
 // ── Leg section: Y candidates ─────────────────────────────────────────────────
@@ -245,56 +237,37 @@ function ankleYCandidates(R: R): YCandidate[] {
 // ── Leg section: W candidates (halfW = radius of one leg = circ / 2π) ─────────
 
 function thighUpperWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.leg_thigh_upper_circ > 0)
-    out.push({ source: 'leg_thigh_upper_circ / (2π)', value: R.leg_thigh_upper_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [{ source: 'leg_thigh_upper_circ / (2π)', value: R.leg_thigh_upper_circ > 0 ? R.leg_thigh_upper_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_thigh_upper_circ > 0) }];
 }
 
 function thighMidWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.leg_thigh_mid_circ > 0)
-    out.push({ source: 'leg_thigh_mid_circ / (2π)', value: R.leg_thigh_mid_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [{ source: 'leg_thigh_mid_circ / (2π)', value: R.leg_thigh_mid_circ > 0 ? R.leg_thigh_mid_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_thigh_mid_circ > 0) }];
 }
 
 function kneeWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.leg_knee_circ > 0)
-    out.push({ source: 'leg_knee_circ / (2π)', value: R.leg_knee_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [{ source: 'leg_knee_circ / (2π)', value: R.leg_knee_circ > 0 ? R.leg_knee_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_knee_circ > 0) }];
 }
 
 function kneeSmallWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.leg_knee_small_circ > 0)
-    out.push({ source: 'leg_knee_small_circ / (2π)', value: R.leg_knee_small_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  if (R.leg_knee_circ > 0)
-    out.push({ source: 'leg_knee_circ / (2π) × 0.87', value: R.leg_knee_circ * CIRC_TO_HALF_WIDTH * 0.5 * 0.87, confidence: 'circ' });
-  return out;
+  return [
+    { source: 'leg_knee_small_circ / (2π)',       value: R.leg_knee_small_circ > 0 ? R.leg_knee_small_circ * CIRC_TO_HALF_WIDTH * 0.5        : 0, confidence: 'circ', missing: !(R.leg_knee_small_circ > 0) },
+    { source: 'leg_knee_circ / (2π) × 0.87',      value: R.leg_knee_circ       > 0 ? R.leg_knee_circ       * CIRC_TO_HALF_WIDTH * 0.5 * 0.87 : 0, confidence: 'circ', missing: !(R.leg_knee_circ       > 0) },
+  ];
 }
 
 function calfWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.leg_calf_circ > 0)
-    out.push({ source: 'leg_calf_circ / (2π)', value: R.leg_calf_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [{ source: 'leg_calf_circ / (2π)', value: R.leg_calf_circ > 0 ? R.leg_calf_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_calf_circ > 0) }];
 }
 
 function ankleHighWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.leg_ankle_high_circ > 0)
-    out.push({ source: 'leg_ankle_high_circ / (2π)', value: R.leg_ankle_high_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [{ source: 'leg_ankle_high_circ / (2π)', value: R.leg_ankle_high_circ > 0 ? R.leg_ankle_high_circ * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ', missing: !(R.leg_ankle_high_circ > 0) }];
 }
 
 function ankleWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.leg_ankle_circ > 0)
-    out.push({ source: 'leg_ankle_circ / (2π)', value: R.leg_ankle_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  if (R.leg_ankle_high_circ > 0)
-    out.push({ source: 'leg_ankle_high_circ / (2π) × 0.9', value: R.leg_ankle_high_circ * CIRC_TO_HALF_WIDTH * 0.5 * 0.9, confidence: 'circ' });
-  return out;
+  return [
+    { source: 'leg_ankle_circ / (2π)',        value: R.leg_ankle_circ      > 0 ? R.leg_ankle_circ      * CIRC_TO_HALF_WIDTH * 0.5       : 0, confidence: 'circ', missing: !(R.leg_ankle_circ      > 0) },
+    { source: 'leg_ankle_high_circ / (2π) × 0.9', value: R.leg_ankle_high_circ > 0 ? R.leg_ankle_high_circ * CIRC_TO_HALF_WIDTH * 0.5 * 0.9 : 0, confidence: 'circ', missing: !(R.leg_ankle_high_circ > 0) },
+  ];
 }
 
 // ── Foot section ──────────────────────────────────────────────────────────────
@@ -303,14 +276,11 @@ function ankleWCandidates(R: R): WCandidate[] {
 const CANONICAL_FOOT = { halfWRatio: 0.146 }; // foot_length / totalHeight ≈ 9.5/65
 
 function footWCandidates(R: R): WCandidate[] {
-  const out: WCandidate[] = [];
-  if (R.foot_length > 0)
-    out.push({ source: 'foot_length', value: R.foot_length, confidence: 'direct' });
-  if (R.foot_circ > 0)
-    out.push({ source: 'foot_circ / (2π)', value: R.foot_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  if (R.foot_instep_circ > 0)
-    out.push({ source: 'foot_instep_circ / (2π)', value: R.foot_instep_circ * CIRC_TO_HALF_WIDTH * 0.5, confidence: 'circ' });
-  return out;
+  return [
+    { source: 'foot_length',              value: R.foot_length       > 0 ? R.foot_length                            : 0, confidence: 'direct', missing: !(R.foot_length       > 0) },
+    { source: 'foot_circ / (2π)',         value: R.foot_circ         > 0 ? R.foot_circ         * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.foot_circ         > 0) },
+    { source: 'foot_instep_circ / (2π)', value: R.foot_instep_circ   > 0 ? R.foot_instep_circ  * CIRC_TO_HALF_WIDTH * 0.5 : 0, confidence: 'circ',   missing: !(R.foot_instep_circ   > 0) },
+  ];
 }
 
 // ── Main resolver ─────────────────────────────────────────────────────────────
