@@ -32,11 +32,16 @@ export interface ArmLandmark extends Landmark {
   side: 'left' | 'right';
   section: 'arm' | 'hand';
   x: number;
+  innerPt?: [number, number];
+  outerPt?: [number, number];
 }
 
 export interface ArmResolved {
   landmarks: ArmLandmark[];
   elbowIdx: number;
+  shoulderTip?: [number, number];  // ST in measurement-space; used for shoulder cap Bezier
+  armAngle?: number;               // degrees from vertical (0 = straight down)
+  debugPts?: Record<string, [number, number]>;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -111,58 +116,110 @@ export function resolveLeftArmLandmarks(R: R, shoulderTipX: number, shoulderTipY
   };
 }
 
-export function resolveRightArmLandmarks(R: R, shoulderTipX: number, shoulderTipY: number, totalHeight: number): ArmResolved {
-  const armUpperW = R.arm_upper_circ > 0 ? R.arm_upper_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['shoulder'] * 2;
-  const armUpperHW = armUpperW / 2;
-  const armfoldW = R.armfold_to_armfold_f > 0 ? R.armfold_to_armfold_f : R.body_armfold_circ > 0 ? R.body_armfold_circ / Math.PI : R.body_bust_circ > 0 ? R.body_bust_circ / Math.PI * 0.9 : totalHeight * 0.096 * 2;
-  const armfoldHW = armfoldW / 2;
-  const armfoldCenterX = armfoldHW + armUpperHW;
+// armfoldPt: [x, y] in measurement-space, traced down torso outline from shoulder tip.
+// armAngle: degrees from vertical (0 = straight down, positive = outward, like a jumping jack).
+export function resolveRightArmLandmarks(R: R, shoulderTipX: number, shoulderTipY: number, armfoldPt: [number, number], totalHeight: number, armAngle = 0): ArmResolved {
+  // Widths
+  const W_upper = R.arm_upper_circ > 0 ? R.arm_upper_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['shoulder'] * 2;
+  const W_elbow = R.arm_elbow_circ > 0 ? R.arm_elbow_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['elbow'] * 2;
+  const W_wrist = R.arm_wrist_circ > 0 ? R.arm_wrist_circ * CIRC_TO_WIDTH : totalHeight * CANONICAL_HW['wrist'] * 2;
+  const W_hand  = R.hand_circ > 0 ? R.hand_circ * CIRC_TO_WIDTH : totalHeight * 0.054;
+  const W_tip   = W_hand * 0.4;
 
-  const armfoldY = R.height_armpit > 0 ? R.height_armpit : (R.shoulder_tip_to_armfold_f > 0 ? (() => {
-    const dx = Math.abs(armfoldCenterX - shoulderTipX);
-    const dy = Math.sqrt(Math.max(0, R.shoulder_tip_to_armfold_f ** 2 - dx ** 2));
-    return shoulderTipY - dy;
-  })() : totalHeight * 0.754);
+  // Lengths
+  const L_A    = R.shoulder_tip_to_armfold_f > 0        ? R.shoulder_tip_to_armfold_f        : totalHeight * 0.032;
+  const L_ST_D = R.arm_shoulder_tip_to_elbow > 0        ? R.arm_shoulder_tip_to_elbow        : totalHeight * 0.208;
+  const L_A_C  = R.arm_armpit_to_elbow > 0              ? R.arm_armpit_to_elbow              : (L_ST_D - L_A) * 0.95;
+  const L_D_F  = R.arm_elbow_to_wrist > 0               ? R.arm_elbow_to_wrist               : totalHeight * 0.146;
+  const L_C_E  = R.arm_elbow_to_wrist_inside > 0        ? R.arm_elbow_to_wrist_inside        : L_D_F;
+  const HL     = R.hand_length > 0 ? R.hand_length : R.hand_palm_length > 0 ? R.hand_palm_length * 1.5 : totalHeight * CANONICAL_HAND_LENGTH;
 
-  const dX = armfoldCenterX - shoulderTipX, dY = armfoldY - shoulderTipY, dLen = Math.sqrt(dX * dX + dY * dY) || 1;
-  const tanX = dX / dLen, tanY = dY / dLen;
-  const outerNX = -tanY, outerNY = tanX;
-  const shoulderX = shoulderTipX - outerNX * armUpperHW, shoulderY = shoulderTipY - outerNY * armUpperHW;
+  // ST: shoulder tip — the anatomical pivot (arm bone connects here)
+  const ST_x = shoulderTipX;
+  const ST_y = shoulderTipY;
 
-  const upperArmLen = R.arm_shoulder_tip_to_elbow > 0 ? R.arm_shoulder_tip_to_elbow : R.arm_shoulder_tip_to_elbow_bent > 0 ? R.arm_shoulder_tip_to_elbow_bent : totalHeight * 0.208;
-  const forearmLen = R.arm_elbow_to_wrist > 0 ? R.arm_elbow_to_wrist : R.arm_elbow_to_wrist_bent > 0 ? R.arm_elbow_to_wrist_bent : totalHeight * 0.146;
+  // A: inner armfold — fixed on the torso outline, does NOT rotate with the arm
+  const A_x = armfoldPt[0];
+  const A_y = armfoldPt[1];
 
-  const at = (dist: number): [number, number] => [shoulderX + tanX * dist, shoulderY + tanY * dist];
-  const [elbowX, elbowY] = at(upperArmLen);
-  const [wristX, wristY] = at(upperArmLen + forearmLen);
+  // All other arm points are in the reference pose (θ=0, arm straight down)
+  // and then rotated around ST by armAngle.
+  // A stays fixed because it is a torso attachment point, not a limb point.
+  const theta  = armAngle * Math.PI / 180;
+  const cosT   = Math.cos(theta);
+  const sinT   = Math.sin(theta);
+  const rotST  = (px: number, py: number): [number, number] => {
+    const dx = px - ST_x, dy = py - ST_y;
+    return [ST_x + dx * cosT - dy * sinT, ST_y + dx * sinT + dy * cosT];
+  };
 
-  const armfoldLen = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : (R.arm_shoulder_tip_to_armfold_line > 0 ? R.arm_shoulder_tip_to_armfold_line : dLen);
-  const handLen = R.hand_length > 0 ? R.hand_length : R.hand_palm_length > 0 ? R.hand_palm_length * 1.5 : totalHeight * CANONICAL_HAND_LENGTH;
+  // Reference pose (θ=0): arm hangs straight down from ST.
+  // B: outer armfold = A displaced right by arm_upper_circ width.
+  // mid0: arm centerline origin for all length measurements.
+  const mid0_x = A_x + W_upper / 2;
+  const mid0_y = A_y;
 
-  const [palmX, palmY] = at(upperArmLen + forearmLen + handLen * 0.45);
-  const [tipX, tipY] = at(upperArmLen + forearmLen + handLen);
+  const [B_x, B_y] = rotST(A_x + W_upper, A_y);
 
-  function lm(id: string, section: 'arm' | 'hand', x: number, y: number, wCands: any[]): ArmLandmark {
-    const base = buildLandmark(id, totalHeight, [{ source: `x=${x.toFixed(2)} y=${y.toFixed(2)} (computed)`, value: y }], wCands, { yRatio: 0, halfWRatio: CANONICAL_HW[id] ?? 0.02 });
-    return { ...base, side: 'right', section, x };
+  // Elbow: L_elbow below mid0 in the reference, then rotated around ST
+  const L_elbow = (L_A_C + L_ST_D) / 2;
+  const [C_x, C_y] = rotST(mid0_x - W_elbow / 2, mid0_y - L_elbow);
+  const [D_x, D_y] = rotST(mid0_x + W_elbow / 2, mid0_y - L_elbow);
+
+  // Wrist
+  const L_wrist = L_elbow + (L_C_E + L_D_F) / 2;
+  const [E_x, E_y] = rotST(mid0_x - W_wrist / 2, mid0_y - L_wrist);
+  const [F_x, F_y] = rotST(mid0_x + W_wrist / 2, mid0_y - L_wrist);
+
+  // Hand palm
+  const [G_x, G_y] = rotST(mid0_x - W_hand / 2, mid0_y - L_wrist - HL * 0.45);
+  const [H_x, H_y] = rotST(mid0_x + W_hand / 2, mid0_y - L_wrist - HL * 0.45);
+
+  // Hand tip
+  const [I_x, I_y] = rotST(mid0_x - W_tip / 2, mid0_y - L_wrist - HL);
+  const [J_x, J_y] = rotST(mid0_x + W_tip / 2, mid0_y - L_wrist - HL);
+
+  const lerpPt = (p1: [number, number], p2: [number, number], t: number): [number, number] => [
+    p1[0] + (p2[0] - p1[0]) * t, p1[1] + (p2[1] - p1[1]) * t,
+  ];
+
+  function lm(id: string, section: 'arm'|'hand', innerPt: [number, number], outerPt: [number, number], wCands: any[]): ArmLandmark {
+    const centerX = (innerPt[0] + outerPt[0]) / 2;
+    const centerY = (innerPt[1] + outerPt[1]) / 2;
+    const dx = outerPt[0] - innerPt[0], dy = outerPt[1] - innerPt[1];
+    const base = buildLandmark(id, totalHeight, [{ source: 'computed', value: centerY }], wCands, { yRatio: 0, halfWRatio: 0.02 });
+    base.halfW = Math.sqrt(dx * dx + dy * dy) / 2;
+    return { ...base, side: 'right', section, x: centerX, y: centerY, innerPt, outerPt };
   }
-
-  const [umX, umY] = at(armfoldLen * 0.5);
-  const [aeX, aeY] = at(armfoldLen);
-  const [laX, laY] = at(upperArmLen + forearmLen * 0.5);
 
   return {
     landmarks: [
-      lm('shoulder', 'arm', shoulderX, shoulderY, shoulderWC(R)),
-      lm('upper-arm', 'arm', umX, umY, upperArmWC(R)),
-      lm('above-elbow', 'arm', aeX, aeY, aboveElbowWC(R)),
-      lm('elbow', 'arm', elbowX, elbowY, elbowWC(R)),
-      lm('lower-arm', 'arm', laX, laY, lowerArmWC(R)),
-      lm('wrist', 'arm', wristX, wristY, wristWC(R)),
-      lm('hand-palm', 'hand', palmX, palmY, handPalmWC(R)),
-      lm('hand-tip', 'hand', tipX, tipY, handTipWC(R)),
+      // outerPt = B (not ST) so the path edge starts at B; ST is stored as shoulderTip for the cap
+      lm('shoulder',     'arm',  [A_x, A_y],                           [B_x, B_y],                           shoulderWC(R)),
+      lm('upper-arm',    'arm',  lerpPt([A_x,A_y],[C_x,C_y], 0.35),   lerpPt([B_x,B_y],[D_x,D_y], 0.35),   upperArmWC(R)),
+      lm('above-elbow',  'arm',  lerpPt([A_x,A_y],[C_x,C_y], 0.70),   lerpPt([B_x,B_y],[D_x,D_y], 0.70),   aboveElbowWC(R)),
+      lm('elbow',        'arm',  [C_x, C_y],                           [D_x, D_y],                           elbowWC(R)),
+      lm('lower-arm',    'arm',  lerpPt([C_x,C_y],[E_x,E_y], 0.5),    lerpPt([D_x,D_y],[F_x,F_y], 0.5),    lowerArmWC(R)),
+      lm('wrist',        'arm',  [E_x, E_y],                           [F_x, F_y],                           wristWC(R)),
+      lm('hand-palm',    'hand', [G_x, G_y],                           [H_x, H_y],                           handPalmWC(R)),
+      lm('hand-tip',     'hand', [I_x, I_y],                           [J_x, J_y],                           handTipWC(R)),
     ],
-    elbowIdx: 3
+    elbowIdx: 3,
+    shoulderTip: [ST_x, ST_y],
+    armAngle,
+    debugPts: {
+      ST: [ST_x, ST_y],
+      A:  [A_x, A_y],
+      B:  [B_x, B_y],
+      C:  [C_x, C_y],
+      D:  [D_x, D_y],
+      E:  [E_x, E_y],
+      F:  [F_x, F_y],
+      G:  [G_x, G_y],
+      H:  [H_x, H_y],
+      I:  [I_x, I_y],
+      J:  [J_x, J_y],
+    },
   };
 }
 
@@ -189,13 +246,47 @@ export function buildArmPath(resolved: ArmResolved, opts: ArmPathOptions): strin
   const hws = resolved.landmarks.map(l => (l.halfW ?? 0) * scale), ns = computeNormals(center);
 
   const dir = opts.flipNormals ? -1 : 1;
-  const outer: [number, number][] = center.map((p, i) => [p[0] + dir * ns[i][0] * hws[i], p[1] + dir * ns[i][1] * hws[i]] as [number, number]);
-  const inner: [number, number][] = center.map((p, i) => [p[0] - dir * ns[i][0] * hws[i], p[1] - dir * ns[i][1] * hws[i]] as [number, number]).reverse();
+  const outer: [number, number][] = resolved.landmarks.map((l, i) => {
+    if (l.outerPt) return [axisX + l.outerPt[0] * scale, toY(l.outerPt[1])] as [number, number];
+    return [center[i][0] + dir * ns[i][0] * hws[i], center[i][1] + dir * ns[i][1] * hws[i]] as [number, number];
+  });
+  
+  const inner: [number, number][] = resolved.landmarks.map((l, i) => {
+    if (l.innerPt) return [axisX + l.innerPt[0] * scale, toY(l.innerPt[1])] as [number, number];
+    return [center[i][0] - dir * ns[i][0] * hws[i], center[i][1] - dir * ns[i][1] * hws[i]] as [number, number];
+  }).reverse();
 
-  const sw = opts.capSweep ?? 1, capR = hws[0].toFixed(1);
-  const cap = `A ${capR} ${capR} 0 0 ${sw} ${outer[0][0].toFixed(1)} ${outer[0][1].toFixed(1)}`;
+  const sw = opts.capSweep ?? 1;
+  let cap = '';
+  if (resolved.shoulderTip) {
+    // Two-part shoulder cap:
+    //   A → ST  : inner armhole side, smooth quadratic arc
+    //   ST → B  : deltoid side — control point mirrors outer[1] through B (G1 at B),
+    //             pushing the curve outward to represent the Deltoid muscle bulk
+    const A_svg  = inner[inner.length - 1];
+    const B_svg  = outer[0];
+    const ST_svg: [number, number] = [axisX + resolved.shoulderTip[0] * scale, toY(resolved.shoulderTip[1])];
 
-  const d = crPath(outer) + ` A ${hws[hws.length - 1].toFixed(1)} ${hws[hws.length - 1].toFixed(1)} 0 0 ${sw} ${inner[0][0].toFixed(1)} ${inner[0][1].toFixed(1)}` + crPath(inner, false) + ` ${cap}`;
+    // Inner armhole (A→ST): pull control point to the midpoint for a gentle arc
+    const cp1x = ((A_svg[0] + ST_svg[0]) / 2).toFixed(1);
+    const cp1y = ((A_svg[1] + ST_svg[1]) / 2).toFixed(1);
+
+    // Deltoid (ST→B): mirror outer[1] (upper-arm outer) through B.
+    // outer[1] is slightly inward and below B, so the mirror is outward and above B —
+    // exactly where the deltoid peak sits. G1 with the outer edge at B is automatic.
+    const d_cpx = (2 * B_svg[0] - outer[1][0]).toFixed(1);
+    const d_cpy = (2 * B_svg[1] - outer[1][1]).toFixed(1);
+
+    cap = ` Q ${cp1x} ${cp1y} ${ST_svg[0].toFixed(1)} ${ST_svg[1].toFixed(1)}` +
+          ` Q ${d_cpx} ${d_cpy} ${B_svg[0].toFixed(1)} ${B_svg[1].toFixed(1)}`;
+  } else if (resolved.landmarks[0].innerPt) {
+    cap = ` L ${outer[0][0].toFixed(1)} ${outer[0][1].toFixed(1)}`;
+  } else {
+    const capR = hws[0].toFixed(1);
+    cap = `A ${capR} ${capR} 0 0 ${sw} ${outer[0][0].toFixed(1)} ${outer[0][1].toFixed(1)}`;
+  }
+
+  const d = crPath(outer) + ` L ${inner[0][0].toFixed(1)} ${inner[0][1].toFixed(1)}` + crPath(inner, false) + cap;
 
   return `<path d="${d}" fill="${fill}" fill-opacity="${fillOpacity}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-opacity="${strokeOpacity}" stroke-linejoin="round"/>`;
 }

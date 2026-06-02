@@ -83,6 +83,7 @@ import { resolveTorsoLandmarks, buildTorsoPath, buildNeckBackLines, buildNecklin
 import { resolveLowerBodyLandmarks, buildHipPath, buildLegPaths, buildFootPaths } from './lower-body.ts';
 import { resolveLeftArmLandmarks, resolveRightArmLandmarks, buildArmPath } from './arm.ts';
 import { resolveHeadLandmarks, buildHeadPath } from './head.ts';
+import { traceOutlineFromShoulder } from './factory.ts';
 import { parseSmis } from '@seamlyme/core';
 
 const FULL = {
@@ -142,6 +143,8 @@ const FULL = {
   arm_shoulder_tip_to_wrist: 22,
   arm_shoulder_tip_to_elbow: 13.5,
   arm_elbow_to_wrist: 8.5,
+  arm_armpit_to_elbow: 8.3,
+  arm_elbow_to_wrist_inside: 8.0,
   arm_upper_circ: 13,
   arm_above_elbow_circ: 12,
   arm_elbow_circ: 12,
@@ -358,9 +361,19 @@ function buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headRe
   const armGuideLines      = buildArmGuideLines(armResolved.landmarks,      'l-', 'left');
   const rightArmGuideLines = buildArmGuideLines(rightArmResolved.landmarks, 'r-', 'right');
 
+  // Debug: visualize all right arm control points
+  const PT_COLORS = { ST:'#f97316', A:'#ef4444', B:'#facc15', C:'#4ade80', D:'#22d3ee', E:'#a78bfa', F:'#f472b6', G:'#fb923c', H:'#34d399', I:'#818cf8', J:'#f9a8d4' };
+  const debugPtsSvg = rightArmResolved.debugPts ? Object.entries(rightArmResolved.debugPts).map(([name, [px, py]]) => {
+    const cx = (AXIS_X + px * scale).toFixed(1);
+    const cy = toY(py).toFixed(1);
+    const color = PT_COLORS[name] ?? '#e4e4e7';
+    return `<circle cx="${cx}" cy="${cy}" r="4" fill="${color}" opacity="0.9"/>
+    <text x="${(+cx + 6).toFixed(1)}" y="${(+cy + 4).toFixed(1)}" fill="${color}" font-size="10" font-weight="bold">${name}</text>`;
+  }).join('') : '';
+
   const floor = `<line x1="0" y1="${PAD + BODY_H}" x2="${svgW}" y2="${PAD + BODY_H}" stroke="#3f3f46" stroke-width="1"/>`;
 
-  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${hipOutlineSvg}${legOutlineSvg}${footSvg}${armSvg}${rightArmSvg}${headSvg}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}${hipGuideLines}${legGuideLines}${footGuide}${armGuideLines}${rightArmGuideLines}${headGuideLines}</svg>`, allLandmarks, rightArmResolved };
+  return { svgW, svgH, html: `<svg width="${svgW}" height="${svgH}">${floor}${hipOutlineSvg}${legOutlineSvg}${footSvg}${armSvg}${rightArmSvg}${headSvg}${outlineSvg}${neckBackLinesSvg}${necklineSvg}${neckBackSvg}${bustpointSvg}${guideLines}${interiorGuides}${hipGuideLines}${legGuideLines}${footGuide}${armGuideLines}${rightArmGuideLines}${headGuideLines}${debugPtsSvg}</svg>`, allLandmarks, rightArmResolved };
 }
 
 function buildDetailPanel(landmark) {
@@ -430,6 +443,11 @@ toolbarEl.innerHTML = `
   <button class="upload-btn">Upload .smis file</button>
   <input type="file" accept=".smis,.xml,.vit" style="display:none"/>
   <span class="upload-label" id="upload-label">or drop anywhere</span>
+  <label style="color:#a1a1aa;font-size:11px;display:flex;align-items:center;gap:6px;margin-left:16px">
+    Right arm angle
+    <input type="range" id="arm-angle" min="-30" max="90" step="1" value="0" style="width:120px"/>
+    <span id="arm-angle-val" style="color:#e4e4e7;min-width:30px">0°</span>
+  </label>
 `;
 
 const fileInput = toolbarEl.querySelector('input');
@@ -439,6 +457,14 @@ const uploadLabel = toolbarEl.querySelector('#upload-label');
 uploadBtn.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', e => {
   if (e.target.files[0]) loadFile(e.target.files[0]);
+});
+
+const armAngleInput = toolbarEl.querySelector('#arm-angle');
+const armAngleVal   = toolbarEl.querySelector('#arm-angle-val');
+armAngleInput.addEventListener('input', () => {
+  armAngleDeg = +armAngleInput.value;
+  armAngleVal.textContent = `${armAngleDeg}°`;
+  renderAll();
 });
 
 // drag & drop on whole page
@@ -473,6 +499,8 @@ function loadFile(file) {
   reader.readAsText(file);
 }
 
+let armAngleDeg = 0;
+
 function renderAll() {
   casesEl.innerHTML = '';
   for (const { label, R } of CASES) {
@@ -483,7 +511,9 @@ function renderAll() {
     const shoulderTipX = shoulderLm ? (shoulderLm.halfW ?? 0) : totalH * 0.115;
     const shoulderTipY = shoulderLm?.y ?? totalH * 0.831;
     const armResolved = resolveLeftArmLandmarks(R, -shoulderTipX, shoulderTipY, totalH);
-    const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, totalH);
+    const L_A = R.shoulder_tip_to_armfold_f > 0 ? R.shoulder_tip_to_armfold_f : totalH * 0.032;
+    const armfoldPt = traceOutlineFromShoulder(resolved.outline, shoulderTipX, shoulderTipY, L_A);
+    const rightArmResolved = resolveRightArmLandmarks(R, shoulderTipX, shoulderTipY, armfoldPt, totalH, armAngleDeg);
     const headResolved = resolveHeadLandmarks(R, totalH);
     const { html: svgHtml, allLandmarks, rightArmResolved: rArm } = buildSvg(resolved, lowerResolved, armResolved, rightArmResolved, headResolved, totalH);
 
