@@ -460,8 +460,8 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .skin-swatch.is-active { outline: 2px solid var(--accent); outline-offset: 1px; }
 .skin-picker { width: 22px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; cursor: pointer; }
 
-.figure-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 10px 8px; }
-.figure-container { width: 100%; }
+.figure-scroll { flex: 1; min-height: 0; overflow: hidden; padding: 10px 8px; display: flex; justify-content: center; }
+.figure-container { height: 100%; display: flex; align-items: stretch; }
 .figure-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; text-align: center; padding: 32px; line-height: 1.7; }
 .figure-guide-label { cursor: pointer; }
 .figure-guide-label:hover { font-weight: 700; }

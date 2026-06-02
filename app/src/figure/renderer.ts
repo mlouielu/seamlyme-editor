@@ -346,5 +346,5 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
 
   const viewMinX = leftLabelX - labelWidth;
   const viewMaxX = rightLabelX + labelWidth;
-  return `<svg viewBox="${viewMinX.toFixed(1)} 0 ${(viewMaxX - viewMinX).toFixed(1)} ${height}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">${paths.join('')}</svg>`;
+  return `<svg viewBox="${viewMinX.toFixed(1)} 0 ${(viewMaxX - viewMinX).toFixed(1)} ${height}" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;max-width:100%;display:block">${paths.join('')}</svg>`;
 }
