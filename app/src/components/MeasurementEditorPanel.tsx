@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import type { SeamlyMeasurement } from '@seamlyme/core';
 import { idToCategory } from '../catalog';
 import { useAppState, useDispatch } from '../store';
+import { NEW_FILE_NAME } from '../config';
 
 function fmtVal(v: number | null | undefined): string {
   if (v == null) return 'Not set';
@@ -320,7 +321,7 @@ function MeasurementEditorPanel() {
       )}
       {doc && measurement ? (
         <MeasurementEditor measurement={measurement} measurements={doc.measurements}
-          unit={doc.unit} dependents={dependents} placeholderZero={fileName === 'new'}
+          unit={doc.unit} dependents={dependents} placeholderZero={fileName === NEW_FILE_NAME}
           autoFocusFormula={pendingFocusFormula} onFocusDone={() => setPendingFocusFormula(false)}
           nameExists={name => Boolean(doc.measurements[name])}
           onApply={(oldName, newName, value, description) => {

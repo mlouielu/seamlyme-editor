@@ -3,6 +3,7 @@ import type { SeamlyMeasurement } from '@seamlyme/core';
 import { idToCategory } from '../catalog';
 import { RECOMMENDED_FIGURE_MEASUREMENTS } from '../recommended';
 import { useAppState, useDispatch } from '../store';
+import { NEW_FILE_NAME } from '../config';
 
 function fmtVal(v: number | null | undefined): string {
   if (v == null) return 'Not set';
@@ -116,7 +117,7 @@ function EditorPanel() {
       <div className="measurement-list" role="list">
         {filteredRows.length === 0 && <div className="empty-cell">No measurements match your filters.</div>}
         {filteredRows.map(m => {
-          const missing = !m.hasValue || (fileName === 'new' && m.raw === '0');
+          const missing = !m.hasValue || (fileName === NEW_FILE_NAME && m.raw === '0');
           return (
           <div key={m.name} role="listitem"
             ref={selectedName === m.name ? selectedRowRef : null}
@@ -134,11 +135,11 @@ function EditorPanel() {
               </span>
               <span className={`measurement-list-calculated${m.error ? ' is-error' : ''}`}
                 title={m.error ?? undefined}>
-                <CalculatedValue measurement={m} unit={doc.unit} placeholderZero={fileName === 'new'} />
+                <CalculatedValue measurement={m} unit={doc.unit} placeholderZero={fileName === NEW_FILE_NAME} />
               </span>
             </button>
             <div className="measurement-list-actions">
-              {m.hasValue && m.dependencies.length === 0 && !(fileName === 'new' && m.raw === '0') && (
+              {m.hasValue && m.dependencies.length === 0 && !(fileName === NEW_FILE_NAME && m.raw === '0') && (
                 <button type="button" className="measurement-list-clear"
                   title="Clear value"
                   onClick={() => dispatch({ type: 'APPLY_EDIT', oldName: m.name, newName: m.name, value: '', description: m.desc })}>

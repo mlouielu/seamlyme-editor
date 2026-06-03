@@ -1,6 +1,7 @@
 import { Profiler, useCallback, useEffect, useMemo, useRef, useState, type ProfilerOnRenderCallback } from 'react';
-import { createDocument, parseSmis } from '@seamlyme/core';
+import { createDocument, parseSmis, serializeSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
+import { DEFAULT_SAVE_NAME, NEW_FILE_NAME } from './config';
 import EditorPanel   from './components/EditorPanel';
 import DiagramPanel  from './components/DiagramPanel';
 import FigurePanel   from './components/FigurePanel';
@@ -19,8 +20,8 @@ const logProfile: ProfilerOnRenderCallback = (
 };
 
 function loadNewSheet(dispatch: ReturnType<typeof useDispatch>) {
-  dispatch({ type: 'LOAD', doc: createDocument({ template: 'default', defaultValue: 0 }), fileName: 'new' });
-  document.title = 'new - SeamlyME';
+  dispatch({ type: 'LOAD', doc: createDocument({ template: 'default', defaultValue: 0 }), fileName: NEW_FILE_NAME });
+  document.title = `${NEW_FILE_NAME} - SeamlyME`;
 }
 
 // ── Drop zone (shown before a file is loaded) ─────────────────────────────────
@@ -110,6 +111,19 @@ function Header() {
     setMenuOpen(false);
   }
 
+  function saveFile() {
+    if (!doc) return;
+    const xml = serializeSmis(doc);
+    const blob = new Blob([xml], { type: 'application/xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = (fileName && fileName !== NEW_FILE_NAME) ? fileName : DEFAULT_SAVE_NAME;
+    a.click();
+    URL.revokeObjectURL(url);
+    setMenuOpen(false);
+  }
+
   const present  = doc ? Object.values(doc.measurements).filter(m => m.hasValue).length : 0;
   const total    = doc ? Object.keys(doc.measurements).length : 0;
   const resolved = doc ? Object.values(doc.measurements).filter(m => m.hasValue && m.resolved !== null).length : 0;
@@ -155,6 +169,7 @@ function Header() {
         </div>
       )}
       <div className="header-file-actions">
+        {doc && <button className="btn primary" onClick={saveFile}>Save</button>}
         <label className="btn">
           {doc ? 'Load another…' : 'Load .smis…'}
           <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
@@ -176,6 +191,9 @@ function Header() {
           </button>
           {menuOpen && (
             <div className="header-dropdown">
+              <button className="header-dropdown-item" onClick={saveFile}>
+                Save
+              </button>
               <label className="header-dropdown-item">
                 Load another…
                 <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
@@ -236,7 +254,7 @@ function Layout() {
     import.meta.env.DEV ? debugParams.get('figure') !== '0' : true,
   );
   const missingVariables = useMemo(() => Object.values(doc?.measurements ?? {})
-    .filter(measurement => !measurement.hasValue || (fileName === 'new' && measurement.raw === '0'))
+    .filter(measurement => !measurement.hasValue || (fileName === NEW_FILE_NAME && measurement.raw === '0'))
     .map(measurement => measurement.name), [doc, fileName]);
 
   if (!doc) return (
