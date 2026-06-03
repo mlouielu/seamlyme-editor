@@ -137,7 +137,16 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 }
 .drop-zone svg { color: var(--muted); margin-bottom: 16px; }
 .drop-zone h2 { margin: 0 0 8px; font-size: 18px; font-weight: 600; }
-.drop-zone p  { margin: 0 0 24px; color: var(--muted); font-size: 13px; }
+.drop-zone p  { margin: 0 0 20px; color: var(--muted); font-size: 13px; }
+.drop-zone-actions {
+  display: flex; justify-content: center; align-items: center;
+  flex-wrap: wrap; gap: 10px;
+}
+.drop-zone-actions .btn { padding: 9px 24px; font-size: 14px; justify-content: center; }
+@media (max-width: 420px) {
+  .drop-zone-actions { flex-direction: column; align-items: stretch; }
+  .drop-zone-actions .btn { width: 100%; }
+}
 
 /* ── Panel shared header ─────────────────────────────────────────────────── */
 .panel-header {

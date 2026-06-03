@@ -79,6 +79,7 @@ function NewFileDialog({ onConfirm, onCancel }: NewFileDialogProps) {
 function DropZone() {
   const dispatch = useDispatch();
   const [showNewDialog, setShowNewDialog] = useState(false);
+  const [showRecentDialog, setShowRecentDialog] = useState(false);
 
   const load = useCallback((file: File) => {
     const reader = new FileReader();
@@ -106,6 +107,14 @@ function DropZone() {
     if (file) load(file);
   }
 
+  function handleRestore(id: string) {
+    const data = loadSession(id);
+    if (!data) { alert('Could not restore session.'); return; }
+    dispatch({ type: 'RESTORE_SESSION', data });
+    document.title = `${data.current.fileName} — SeamlyME`;
+    setShowRecentDialog(false);
+  }
+
   return (
     <div className="drop-screen" onDragOver={e => e.preventDefault()} onDrop={onDrop}>
       <div className="drop-zone">
@@ -114,16 +123,25 @@ function DropZone() {
         </svg>
         <h2>Drop your .smis file here</h2>
         <p>SeamlyME body measurements · formulas evaluated automatically</p>
-        <label className="btn primary">
-          Browse file…
-          <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
-        </label>
-        <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>
+        <div className="drop-zone-actions">
+          <label className="btn primary">
+            Browse file…
+            <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
+          </label>
+          <button className="btn" onClick={() => setShowRecentDialog(true)}>Recent</button>
+          <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>
+        </div>
       </div>
       {showNewDialog && (
         <NewFileDialog
           onConfirm={unit => { loadNewSheet(dispatch, unit); setShowNewDialog(false); }}
           onCancel={() => setShowNewDialog(false)}
+        />
+      )}
+      {showRecentDialog && (
+        <RecentSessionsDialog
+          onRestore={handleRestore}
+          onClose={() => setShowRecentDialog(false)}
         />
       )}
     </div>
@@ -290,15 +308,17 @@ function Header() {
           </button>
         </div>
       )}
-      <div className="header-file-actions">
-        {doc && <button className="btn primary" onClick={saveFile}>Save</button>}
-        <label className="btn">
-          {doc ? 'Load another…' : 'Load .smis…'}
-          <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
-        </label>
-        <button className="btn" onClick={() => setShowRecentDialog(true)}>Recent</button>
-        {doc && <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>}
-      </div>
+      {doc && (
+        <div className="header-file-actions">
+          <button className="btn primary" onClick={saveFile}>Save</button>
+          <label className="btn">
+            Load another…
+            <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
+          </label>
+          <button className="btn" onClick={() => setShowRecentDialog(true)}>Recent</button>
+          <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>
+        </div>
+      )}
       {doc && (
         <div className="header-hamburger-wrap" ref={menuRef}>
           <button
