@@ -312,7 +312,7 @@ function Header() {
         <div className="header-file-actions">
           <button className="btn primary" onClick={saveFile}>Save</button>
           <label className="btn">
-            Load another…
+            Load
             <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
           </label>
           <button className="btn" onClick={() => setShowRecentDialog(true)}>Recent</button>
@@ -338,7 +338,7 @@ function Header() {
                 Save
               </button>
               <label className="header-dropdown-item">
-                Load another…
+                Load
                 <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
               </label>
               <button className="header-dropdown-item" onClick={() => { setMenuOpen(false); setShowRecentDialog(true); }}>

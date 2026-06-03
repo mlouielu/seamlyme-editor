@@ -13,6 +13,8 @@ const SKIN_PRESETS = [
   { name: 'Sand',      color: '#dfae82' },
   { name: 'Tan',       color: '#c98e62' },
   { name: 'Deep',      color: '#8a5a44' },
+  { name: 'Brown',     color: '#6d3800' },
+  { name: 'Black',     color: '#1e0f00' },
 ];
 
 interface FigurePanelProps {
@@ -23,11 +25,128 @@ interface FigurePanelProps {
 function FigurePanel({ doc, skinColor }: FigurePanelProps) {
   const dispatch = useDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
+  const scrollRef    = useRef<HTMLDivElement>(null);
   const copyStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedLandmarkId, setSelectedLandmarkId] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [hideLabel, setHideLabel] = useState(false);
   const [hideGuideline, setHideGuideline] = useState(false);
+
+  // ── Pan / zoom state ────────────────────────────────────────────────────────
+  const xform    = useRef({ tx: 0, ty: 0, scale: 1 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const gesture  = useRef<
+    | { type: 'pan';   x0: number; y0: number; tx0: number; ty0: number }
+    | { type: 'pinch'; d0: number; cx: number; cy: number; scale0: number; tx0: number; ty0: number }
+    | null
+  >(null);
+  const pendingTap = useRef<{ x: number; y: number } | null>(null);
+
+  function commitTransform() {
+    const el = containerRef.current;
+    if (!el) return;
+    const { tx, ty, scale } = xform.current;
+    el.style.transform = `translate(${tx}px,${ty}px) scale(${scale})`;
+  }
+
+  function zoomAt(px: number, py: number, factor: number) {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    const W = scroll.clientWidth, H = scroll.clientHeight;
+    const { tx, ty, scale } = xform.current;
+    const ns = Math.min(8, Math.max(0.1, scale * factor));
+    const r  = ns / scale;
+    xform.current = {
+      scale: ns,
+      tx: px - W / 2 - (px - W / 2 - tx) * r,
+      ty: py - H / 2 - (py - H / 2 - ty) * r,
+    };
+    commitTransform();
+  }
+
+  function resetZoom() {
+    xform.current = { tx: 0, ty: 0, scale: 1 };
+    commitTransform();
+  }
+
+  function inspectAt(target: Element | null) {
+    const label = target?.closest<SVGTextElement>('[data-landmark-id]');
+    if (label) setSelectedLandmarkId(label.dataset.landmarkId ?? null);
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.currentTarget.setPointerCapture(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const pts = [...pointers.current.values()];
+    if (pts.length === 1) {
+      pendingTap.current = { x: e.clientX, y: e.clientY };
+      gesture.current = { type: 'pan', x0: e.clientX, y0: e.clientY, tx0: xform.current.tx, ty0: xform.current.ty };
+    } else {
+      pendingTap.current = null;
+      const [a, b] = pts;
+      const rect = scrollRef.current!.getBoundingClientRect();
+      gesture.current = {
+        type: 'pinch',
+        d0: Math.hypot(a.x - b.x, a.y - b.y),
+        cx: (a.x + b.x) / 2 - rect.left,
+        cy: (a.y + b.y) / 2 - rect.top,
+        scale0: xform.current.scale,
+        tx0: xform.current.tx,
+        ty0: xform.current.ty,
+      };
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const tap = pendingTap.current;
+    if (tap && Math.hypot(e.clientX - tap.x, e.clientY - tap.y) > 7) pendingTap.current = null;
+    const g   = gesture.current;
+    const pts = [...pointers.current.values()];
+    if (pts.length === 1 && g?.type === 'pan') {
+      xform.current.tx = g.tx0 + e.clientX - g.x0;
+      xform.current.ty = g.ty0 + e.clientY - g.y0;
+      commitTransform();
+    } else if (pts.length >= 2 && g?.type === 'pinch') {
+      const [a, b] = pts;
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const ns   = Math.min(8, Math.max(0.1, g.scale0 * dist / g.d0));
+      const W = scrollRef.current!.clientWidth, H = scrollRef.current!.clientHeight;
+      const r = ns / g.scale0;
+      xform.current = { scale: ns, tx: g.cx - W/2 - (g.cx - W/2 - g.tx0) * r, ty: g.cy - H/2 - (g.cy - H/2 - g.ty0) * r };
+      commitTransform();
+    }
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    const tap = pendingTap.current;
+    pointers.current.delete(e.pointerId);
+    if (tap && pointers.current.size === 0) inspectAt(document.elementFromPoint(tap.x, tap.y) as Element);
+    pendingTap.current = null;
+    const pts = [...pointers.current.values()];
+    if (pts.length === 0) {
+      gesture.current = null;
+    } else if (pts.length === 1) {
+      const [pt] = pts;
+      gesture.current = { type: 'pan', x0: pt.x, y0: pt.y, tx0: xform.current.tx, ty0: xform.current.ty };
+    }
+  }
+
+  // Non-passive wheel for zoom
+  useEffect(() => {
+    const scroll = scrollRef.current;
+    if (!scroll) return;
+    function onWheel(e: WheelEvent) {
+      e.preventDefault();
+      const rect = scroll!.getBoundingClientRect();
+      zoomAt(e.clientX - rect.left, e.clientY - rect.top, e.deltaY < 0 ? 1.12 : 1 / 1.12);
+    }
+    scroll.addEventListener('wheel', onWheel, { passive: false });
+    return () => scroll.removeEventListener('wheel', onWheel);
+  // zoomAt reads only refs, no reactive deps needed
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const figureHtml = useMemo(
     () => doc ? renderFigure(doc, {
       skinColor,
@@ -43,23 +162,6 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
     [doc, selectedLandmarkId],
   );
 
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !doc) return;
-
-    function inspectLabel(target: EventTarget | null) {
-      const label = (target as Element | null)?.closest<SVGTextElement>('[data-landmark-id]');
-      if (!label) return;
-      setSelectedLandmarkId(label.dataset.landmarkId ?? null);
-    }
-
-    function onClick(event: MouseEvent) {
-      inspectLabel(event.target);
-    }
-
-    container.addEventListener('click', onClick);
-    return () => container.removeEventListener('click', onClick);
-  }, [doc, figureHtml]);
 
   useEffect(() => () => {
     if (copyStatusTimerRef.current) clearTimeout(copyStatusTimerRef.current);
@@ -194,12 +296,31 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
       )}
 
       {figureHtml && (
-        <div className="figure-scroll">
+        <div
+          ref={scrollRef}
+          className="figure-scroll"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
           <div
             ref={containerRef}
             className="figure-container"
             dangerouslySetInnerHTML={{ __html: figureHtml }}
           />
+          <button
+            type="button"
+            className="figure-reset-zoom"
+            title="Reset zoom"
+            onPointerDown={e => e.stopPropagation()}
+            onClick={resetZoom}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3.51 15a9 9 0 1 0 .49-3.31"/><polyline points="1 4 1 10 7 10"/>
+            </svg>
+            Reset
+          </button>
         </div>
       )}
 

@@ -616,8 +616,26 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .skin-swatch.is-active { outline: 2px solid var(--accent); outline-offset: 1px; }
 .skin-picker { width: 22px; height: 22px; padding: 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; cursor: pointer; }
 
-.figure-scroll { flex: 1; min-height: 0; overflow: hidden; padding: 10px 8px; display: flex; justify-content: center; }
-.figure-container { height: 100%; display: flex; align-items: stretch; }
+.figure-scroll {
+  flex: 1; min-height: 0; overflow: hidden; padding: 10px 8px;
+  display: flex; justify-content: center; position: relative;
+  touch-action: none; cursor: grab; user-select: none;
+}
+.figure-scroll:active { cursor: grabbing; }
+.figure-reset-zoom {
+  display: none;
+  position: absolute; bottom: 10px; right: 10px; z-index: 10;
+  align-items: center; gap: 5px; padding: 5px 10px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface); color: var(--muted);
+  font-family: inherit; font-size: 11px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12);
+}
+.figure-reset-zoom:hover { background: var(--bg); color: var(--text); }
+@media (max-width: 700px) {
+  .figure-reset-zoom { display: flex; }
+}
+.figure-container { height: 100%; display: flex; align-items: stretch; transform-origin: center center; }
 .figure-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: 13px; text-align: center; padding: 32px; line-height: 1.7; }
 .figure-guide-label { cursor: pointer; }
 .figure-guide-label:hover { font-weight: 700; }
