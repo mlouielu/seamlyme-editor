@@ -108,6 +108,15 @@ function MeasurementEditor({
   const [description, setDescription] = useState(measurement.desc);
   const [dependenciesExpanded, setDependenciesExpanded] = useState(false);
   const [error, setError] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  function copyVariable(e: React.MouseEvent) {
+    e.preventDefault();
+    navigator.clipboard.writeText(variable.trim()).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  }
   const timerRef = useRef<number | null>(null);
   const formulaInputRef = useRef<HTMLInputElement>(null);
   const canRename = !idToCategory(measurement.id);
@@ -198,9 +207,24 @@ function MeasurementEditor({
         </div>
         <label className="variable-field">
           <span>Variable name</span>
-          <input value={variable} onChange={e => setVariable(e.target.value)}
-            onKeyDown={onKeyDown} spellCheck={false} disabled={!canRename}
-            title={!canRename ? 'Pre-defined variable names cannot be changed' : undefined} />
+          <div className="variable-field-input-wrap">
+            <input value={variable} onChange={e => setVariable(e.target.value)}
+              onKeyDown={onKeyDown} spellCheck={false} disabled={!canRename}
+              title={!canRename ? 'Pre-defined variable names cannot be changed' : undefined} />
+            <button type="button" className={`variable-copy-btn${copied ? ' is-copied' : ''}`}
+              title="Copy variable name" onClick={copyVariable}>
+              {copied ? (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+              ) : (
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="9" y="9" width="13" height="13" rx="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+              )}
+            </button>
+          </div>
         </label>
       </div>
       <div className="measurement-editor-row calculation-row">
@@ -221,14 +245,12 @@ function MeasurementEditor({
           </strong>
         </div>
       </div>
-      {!dependenciesExpanded && (
-        <label className="measurement-description-field">
-          <span>Measurement description</span>
-          <textarea value={description} rows={2}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="Add notes or measurement instructions" />
-        </label>
-      )}
+      <label className="measurement-description-field">
+        <span>Measurement description</span>
+        <textarea value={description} rows={2}
+          onChange={e => setDescription(e.target.value)}
+          placeholder="Add notes or measurement instructions" />
+      </label>
       <div className={`measurement-editor-dependency-section${dependenciesExpanded ? ' is-expanded' : ''}`}>
         <button type="button" className="measurement-editor-dependency-toggle"
           aria-expanded={dependenciesExpanded}
@@ -241,14 +263,12 @@ function MeasurementEditor({
             <path d="m4 6 4 4 4-4" />
           </svg>
         </button>
-        {dependenciesExpanded && (
-          <div className="measurement-editor-dependencies">
-            <DependencyTree names={measurement.dependencies} measurements={measurements}
-              onSelect={onSelectVariable} />
-            <DependencyLinks label="Used by" names={dependents}
-              nameExists={nameExists} onSelect={onSelectVariable} />
-          </div>
-        )}
+        <div className={`measurement-editor-dependencies${dependenciesExpanded ? '' : ' is-hidden'}`}>
+          <DependencyTree names={measurement.dependencies} measurements={measurements}
+            onSelect={onSelectVariable} />
+          <DependencyLinks label="Used by" names={dependents}
+            nameExists={nameExists} onSelect={onSelectVariable} />
+        </div>
       </div>
       {error && <div className="measurement-editor-error">{error}</div>}
     </div>

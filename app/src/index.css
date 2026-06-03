@@ -457,6 +457,19 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   background: var(--surface); color: var(--text); font-family: var(--mono); font-size: 12px; outline: none;
 }
 .measurement-editor-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-l); }
+.variable-field-input-wrap { position: relative; }
+.variable-field-input-wrap input { padding-right: 26px; }
+.variable-copy-btn {
+  position: absolute; right: 1px; top: 1px;
+  display: flex; align-items: center; justify-content: center;
+  width: 22px; height: calc(100% - 2px); padding: 0; border: 1px; border-radius: 4px;
+  background: white; color: var(--muted); cursor: pointer;
+  border-style: solid;
+  border-color: gray;
+}
+.variable-copy-btn:hover { background: var(--bg); color: var(--text); }
+.variable-copy-btn.is-copied { color: #16a34a; }
+.variable-copy-btn svg { width: 12px; height: 12px; }
 .measurement-editor-row input:disabled {
   border-color: var(--border); background: var(--bg); color: var(--muted); cursor: not-allowed;
 }
@@ -497,6 +510,14 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   display: flex; gap: 8px;
   margin-top: 4px; height: clamp(70px, 12vh, 108px);
 }
+.measurement-editor-dependencies.is-hidden { display: none; }
+
+/* ── Desktop: always-expanded deps + visible description ─────────────────── */
+@media (min-width: 701px) {
+  .measurement-editor-dependency-toggle { display: none; }
+  .measurement-editor-dependencies.is-hidden { display: flex; }
+}
+
 .measurement-editor-links {
   display: flex; flex-direction: column; align-content: flex-start; gap: 3px; color: var(--muted); font-size: 10px;
   min-width: 0; overflow: hidden; flex: 1 1 0;
@@ -552,7 +573,8 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 /* ── Diagram panel ───────────────────────────────────────────────────────── */
 .diagram-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: #f3f3f3; height: 100%; }
 .diagram-viewer { flex: 1; overflow: hidden; position: relative; }
-.diagram-touch-overlay { display: none; position: absolute; inset: 0; z-index: 2; touch-action: none; }
+.diagram-touch-overlay { display: block; position: absolute; inset: 0; z-index: 2; touch-action: none; cursor: grab; }
+.diagram-touch-overlay:active { cursor: grabbing; }
 .diagram-status {
   flex-shrink: 0; padding: 4px 12px; background: var(--surface);
   border-top: 1px solid var(--border); font-size: 12px;
@@ -637,7 +659,6 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   .workspace-left > * { min-width: 0; min-height: 0; }
   .workspace-diagram { min-height: 0; }
   .diagram-panel { min-height: 0; height: 100%; overflow: hidden; }
-  .diagram-touch-overlay { display: block; }
   .diagram-status { display: none; }
   .editor-panel { width: 100%; flex: none; border-top: 1px solid var(--border); }
   .category-selector-mobile {

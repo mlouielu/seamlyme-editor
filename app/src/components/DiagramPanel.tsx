@@ -51,7 +51,8 @@ function getGlobalBBox(el: SVGGraphicsElement, svg: SVGSVGElement): BBox | null 
 
 function DiagramPanel({ activeCategory, highlighted, selected, missingVariables }: DiagramPanelProps) {
   const dispatch = useDispatch();
-  const objRef  = useRef<HTMLObjectElement>(null);
+  const objRef     = useRef<HTMLObjectElement>(null);
+  const overlayRef = useRef<HTMLDivElement>(null);
   const bridged = useRef(false);
   const activeSvgHighlights = useRef<SVGElement[]>([]);
   const selectedRef = useRef(selected);
@@ -266,7 +267,6 @@ function DiagramPanel({ activeCategory, highlighted, selected, missingVariables 
   // ── Desktop pan/zoom (wheel + drag) ─────────────────────────────────────
   const viewerRef = useRef<HTMLDivElement>(null);
   const transform = useRef({ scale: 1, tx: 0, ty: 0 });
-  const dragging  = useRef<{ startX: number; startY: number; tx0: number; ty0: number } | null>(null);
   const SVG_W = 3003, SVG_H = 6802;
 
   function commit() {
@@ -392,7 +392,8 @@ function DiagramPanel({ activeCategory, highlighted, selected, missingVariables 
 
   useEffect(() => {
     const viewer = viewerRef.current;
-    if (!viewer) return;
+    const overlay = overlayRef.current;
+    if (!viewer || !overlay) return;
 
     function initFit() {
       const { clientWidth: vw, clientHeight: vh } = viewer!;
@@ -415,33 +416,9 @@ function DiagramPanel({ activeCategory, highlighted, selected, missingVariables 
       clampT(); commit();
     }
 
-    function onMouseDown(e: MouseEvent) {
-      if (e.button !== 0) return;
-      dragging.current = { startX: e.clientX, startY: e.clientY, tx0: transform.current.tx, ty0: transform.current.ty };
-      viewer!.style.cursor = 'grabbing';
-    }
-    function onMouseMove(e: MouseEvent) {
-      if (!dragging.current) return;
-      transform.current.tx = dragging.current.tx0 + e.clientX - dragging.current.startX;
-      transform.current.ty = dragging.current.ty0 + e.clientY - dragging.current.startY;
-      clampT(); commit();
-    }
-    function onMouseUp() {
-      dragging.current = null;
-      viewer!.style.cursor = 'grab';
-    }
-
     requestAnimationFrame(initFit);
-    viewer.addEventListener('wheel', onWheel, { passive: false });
-    viewer.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('mousemove', onMouseMove);
-    window.addEventListener('mouseup', onMouseUp);
-    return () => {
-      viewer.removeEventListener('wheel', onWheel);
-      viewer.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
-    };
+    overlay.addEventListener('wheel', onWheel, { passive: false });
+    return () => { overlay.removeEventListener('wheel', onWheel); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -451,7 +428,7 @@ function DiagramPanel({ activeCategory, highlighted, selected, missingVariables 
         <span>Body diagram</span>
         <span className="panel-header-hint">scroll to zoom · drag to pan</span>
       </div>
-      <div ref={viewerRef} className="diagram-viewer" style={{ cursor: 'grab', overflow: 'hidden', position: 'relative', flex: 1 }}>
+      <div ref={viewerRef} className="diagram-viewer" style={{ overflow: 'hidden', position: 'relative', flex: 1 }}>
         <object
           ref={objRef}
           type="image/svg+xml"
@@ -470,7 +447,7 @@ function DiagramPanel({ activeCategory, highlighted, selected, missingVariables 
             pointerEvents: 'auto',
           }}
         />
-        <div className="diagram-touch-overlay"
+        <div ref={overlayRef} className="diagram-touch-overlay"
           onPointerDown={onTouchPointerDown}
           onPointerMove={onTouchPointerMove}
           onPointerUp={onTouchPointerUp}
