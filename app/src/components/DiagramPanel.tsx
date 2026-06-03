@@ -1,7 +1,7 @@
 import { memo, useRef, useEffect, useCallback } from 'react';
 import { useDispatch } from '../store';
 
-const SVG_URL = '/Seamly2d-interactive-body-measurements.svg';
+const SVG_URL = `${import.meta.env.BASE_URL}Seamly2d-interactive-body-measurements.svg`;
 
 type SvgDoc = Document;
 
