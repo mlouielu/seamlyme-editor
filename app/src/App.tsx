@@ -1,4 +1,5 @@
 import { Profiler, useCallback, useEffect, useMemo, useRef, useState, type ProfilerOnRenderCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { createDocument, parseSmis, serializeSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
 import { DEFAULT_SAVE_NAME, NEW_FILE_NAME } from './config';
@@ -19,15 +20,64 @@ const logProfile: ProfilerOnRenderCallback = (
   );
 };
 
-function loadNewSheet(dispatch: ReturnType<typeof useDispatch>) {
-  dispatch({ type: 'LOAD', doc: createDocument({ template: 'default', defaultValue: 0 }), fileName: NEW_FILE_NAME });
+type Unit = 'cm' | 'mm' | 'inch';
+
+function loadNewSheet(dispatch: ReturnType<typeof useDispatch>, unit: Unit = 'cm') {
+  dispatch({ type: 'LOAD', doc: createDocument({ unit, template: 'default', defaultValue: 0 }), fileName: NEW_FILE_NAME });
   document.title = `${NEW_FILE_NAME} - SeamlyME`;
+}
+
+// ── New file dialog ────────────────────────────────────────────────────────────
+
+interface NewFileDialogProps {
+  onConfirm: (unit: Unit) => void;
+  onCancel: () => void;
+}
+
+function NewFileDialog({ onConfirm, onCancel }: NewFileDialogProps) {
+  const [unit, setUnit] = useState<Unit>('cm');
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') onCancel();
+      if (e.key === 'Enter') onConfirm(unit);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [unit, onConfirm, onCancel]);
+
+  return createPortal(
+    <div className="dialog-backdrop" onMouseDown={onCancel}>
+      <div className="dialog" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal aria-label="New file">
+        <h2 className="dialog-title">New measurement file</h2>
+        <p className="dialog-body">Choose the unit for all measurements.</p>
+        <div className="dialog-unit-options">
+          {(['cm', 'mm', 'inch'] as Unit[]).map(u => (
+            <label key={u} className={`dialog-unit-option${unit === u ? ' is-selected' : ''}`}>
+              <input type="radio" name="unit" value={u} checked={unit === u}
+                onChange={() => setUnit(u)} />
+              <span className="dialog-unit-label">{u}</span>
+              <span className="dialog-unit-hint">
+                {u === 'cm' ? 'centimetres' : u === 'mm' ? 'millimetres' : 'inches'}
+              </span>
+            </label>
+          ))}
+        </div>
+        <div className="dialog-actions">
+          <button className="btn" onClick={onCancel}>Cancel</button>
+          <button className="btn primary" onClick={() => onConfirm(unit)}>Create</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
 }
 
 // ── Drop zone (shown before a file is loaded) ─────────────────────────────────
 
 function DropZone() {
   const dispatch = useDispatch();
+  const [showNewDialog, setShowNewDialog] = useState(false);
 
   const load = useCallback((file: File) => {
     const reader = new FileReader();
@@ -67,8 +117,14 @@ function DropZone() {
           Browse file…
           <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
         </label>
-        <button className="btn" onClick={() => loadNewSheet(dispatch)}>New</button>
+        <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>
       </div>
+      {showNewDialog && (
+        <NewFileDialog
+          onConfirm={unit => { loadNewSheet(dispatch, unit); setShowNewDialog(false); }}
+          onCancel={() => setShowNewDialog(false)}
+        />
+      )}
     </div>
   );
 }
@@ -79,6 +135,7 @@ function Header() {
   const { doc, fileName, canUndo, canRedo } = useAppState();
   const dispatch = useDispatch();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [showNewDialog, setShowNewDialog] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -174,7 +231,7 @@ function Header() {
           {doc ? 'Load another…' : 'Load .smis…'}
           <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
         </label>
-        {doc && <button className="btn" onClick={() => loadNewSheet(dispatch)}>New</button>}
+        {doc && <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>}
       </div>
       {doc && (
         <div className="header-hamburger-wrap" ref={menuRef}>
@@ -198,12 +255,18 @@ function Header() {
                 Load another…
                 <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
               </label>
-              <button className="header-dropdown-item" onClick={() => { loadNewSheet(dispatch); setMenuOpen(false); }}>
+              <button className="header-dropdown-item" onClick={() => { setMenuOpen(false); setShowNewDialog(true); }}>
                 New
               </button>
             </div>
           )}
         </div>
+      )}
+      {showNewDialog && (
+        <NewFileDialog
+          onConfirm={unit => { loadNewSheet(dispatch, unit); setShowNewDialog(false); }}
+          onCancel={() => setShowNewDialog(false)}
+        />
       )}
     </header>
   );

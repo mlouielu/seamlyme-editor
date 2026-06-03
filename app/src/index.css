@@ -84,6 +84,33 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .btn.primary:disabled:hover { background: var(--accent); }
 .btn-icon { padding: 6px 8px; }
 
+/* ── Dialog ───────────────────────────────────────────────────────────────── */
+.dialog-backdrop {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,.35); backdrop-filter: blur(2px);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+.dialog {
+  background: var(--surface); border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.25);
+  padding: 28px; width: 100%; max-width: 340px;
+}
+.dialog-title { margin: 0 0 6px; font-size: 16px; font-weight: 700; }
+.dialog-body { margin: 0 0 20px; color: var(--muted); font-size: 13px; }
+.dialog-unit-options { display: flex; gap: 8px; margin-bottom: 24px; }
+.dialog-unit-option {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  padding: 12px 8px; border: 2px solid var(--border); border-radius: var(--radius);
+  cursor: pointer; transition: border-color .12s, background .12s;
+}
+.dialog-unit-option input { display: none; }
+.dialog-unit-option:hover { border-color: #c4b5fd; background: var(--accent-l); }
+.dialog-unit-option.is-selected { border-color: var(--accent); background: var(--accent-l); }
+.dialog-unit-label { font-size: 18px; font-weight: 700; color: var(--text); }
+.dialog-unit-hint { font-size: 10px; color: var(--muted); }
+.dialog-unit-option.is-selected .dialog-unit-label { color: var(--accent); }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* ── Drop zone ────────────────────────────────────────────────────────────── */
 .drop-screen { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; }
 .drop-zone {
