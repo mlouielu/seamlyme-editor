@@ -1,10 +1,12 @@
 import {
   createContext,
   useContext,
+  useEffect,
   useReducer,
   type ReactNode,
   type Dispatch,
 } from 'react';
+import { saveSession } from './autosave';
 import {
   addMeasurement,
   addMeasurementAfter,
@@ -80,7 +82,8 @@ export type Action =
   | { type: 'SET_VALUE_FILTER'; filter: ValueFilter }
   | { type: 'SET_SKIN_COLOR'; color: string }
   | { type: 'UNDO' }
-  | { type: 'REDO' };
+  | { type: 'REDO' }
+  | { type: 'RESTORE_SESSION'; data: HistoryEnvelope };
 
 // ── Reducer ───────────────────────────────────────────────────────────────────
 
@@ -315,13 +318,15 @@ const DOC_MUTATING = new Set<Action['type']>([
 ]);
 const HISTORY_LIMIT = 50;
 
-interface HistoryEnvelope {
+export interface HistoryEnvelope {
   current: AppState;
   past: AppState[];   // oldest first; most-recent at [past.length - 1]
   future: AppState[]; // next redo at [0]
 }
 
 function historyReducer(envelope: HistoryEnvelope, action: Action): HistoryEnvelope {
+  if (action.type === 'RESTORE_SESSION') return action.data;
+
   if (action.type === 'UNDO') {
     if (envelope.past.length === 0) return envelope;
     const prev = envelope.past[envelope.past.length - 1];
@@ -370,6 +375,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     past: [],
     future: [],
   });
+
+  useEffect(() => {
+    const { fileName, doc } = envelope.current;
+    if (!doc || !fileName) return;
+    const timer = setTimeout(() => saveSession(fileName, envelope), 1500);
+    return () => clearTimeout(timer);
+  }, [envelope]);
 
   const stateWithHistory: AppState = {
     ...envelope.current,

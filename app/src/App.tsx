@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { createDocument, parseSmis, serializeSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
 import { DEFAULT_SAVE_NAME, NEW_FILE_NAME } from './config';
+import { loadRecentMetas, loadSession, deleteSession, type SessionMeta } from './autosave';
 import EditorPanel   from './components/EditorPanel';
 import DiagramPanel  from './components/DiagramPanel';
 import FigurePanel   from './components/FigurePanel';
@@ -129,6 +130,61 @@ function DropZone() {
   );
 }
 
+// ── Recent sessions dialog ────────────────────────────────────────────────────
+
+interface RecentSessionsDialogProps {
+  onRestore: (id: string) => void;
+  onClose: () => void;
+}
+
+function RecentSessionsDialog({ onRestore, onClose }: RecentSessionsDialogProps) {
+  const [metas, setMetas] = useState<SessionMeta[]>(() => loadRecentMetas());
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  function handleDelete(id: string) {
+    deleteSession(id);
+    setMetas(m => m.filter(s => s.id !== id));
+  }
+
+  return createPortal(
+    <div className="dialog-backdrop" onMouseDown={onClose}>
+      <div className="dialog dialog-recent" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal aria-label="Recent files">
+        <h2 className="dialog-title">Recent files</h2>
+        {metas.length === 0 ? (
+          <p className="dialog-body">No autosaved sessions yet. Sessions are saved automatically as you edit.</p>
+        ) : (
+          <ul className="recent-list">
+            {metas.map(meta => (
+              <li key={meta.id} className="recent-item">
+                <button className="recent-item-main" onClick={() => onRestore(meta.id)}>
+                  <span className="recent-item-name">{meta.fileName}</span>
+                  <span className="recent-item-meta">
+                    {meta.measurementCount} measurements &middot; {new Date(meta.savedAt).toLocaleString()}
+                  </span>
+                </button>
+                <button className="recent-item-delete" title="Remove from recent" onClick={() => handleDelete(meta.id)}>
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+                    <line x1="1" y1="1" x2="11" y2="11"/><line x1="11" y1="1" x2="1" y2="11"/>
+                  </svg>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        <div className="dialog-actions">
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Header ────────────────────────────────────────────────────────────────────
 
 function Header() {
@@ -136,7 +192,16 @@ function Header() {
   const dispatch = useDispatch();
   const [menuOpen, setMenuOpen] = useState(false);
   const [showNewDialog, setShowNewDialog] = useState(false);
+  const [showRecentDialog, setShowRecentDialog] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  function handleRestore(id: string) {
+    const data = loadSession(id);
+    if (!data) { alert('Could not restore session.'); return; }
+    dispatch({ type: 'RESTORE_SESSION', data });
+    document.title = `${data.current.fileName} — SeamlyME`;
+    setShowRecentDialog(false);
+  }
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -231,6 +296,7 @@ function Header() {
           {doc ? 'Load another…' : 'Load .smis…'}
           <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
         </label>
+        <button className="btn" onClick={() => setShowRecentDialog(true)}>Recent</button>
         {doc && <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>}
       </div>
       {doc && (
@@ -255,6 +321,9 @@ function Header() {
                 Load another…
                 <input type="file" accept=".smis,.xml,.vit" style={{ display: 'none' }} onChange={onInputChange} />
               </label>
+              <button className="header-dropdown-item" onClick={() => { setMenuOpen(false); setShowRecentDialog(true); }}>
+                Recent
+              </button>
               <button className="header-dropdown-item" onClick={() => { setMenuOpen(false); setShowNewDialog(true); }}>
                 New
               </button>
@@ -266,6 +335,12 @@ function Header() {
         <NewFileDialog
           onConfirm={unit => { loadNewSheet(dispatch, unit); setShowNewDialog(false); }}
           onCancel={() => setShowNewDialog(false)}
+        />
+      )}
+      {showRecentDialog && (
+        <RecentSessionsDialog
+          onRestore={handleRestore}
+          onClose={() => setShowRecentDialog(false)}
         />
       )}
     </header>

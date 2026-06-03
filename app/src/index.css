@@ -110,6 +110,24 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .dialog-unit-hint { font-size: 10px; color: var(--muted); }
 .dialog-unit-option.is-selected .dialog-unit-label { color: var(--accent); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.dialog-recent { max-width: 420px; }
+.recent-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.recent-item { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.recent-item:hover { border-color: #c4b5fd; }
+.recent-item-main {
+  flex: 1; display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  padding: 10px 12px; border: 0; background: transparent;
+  cursor: pointer; font-family: inherit; text-align: left;
+}
+.recent-item-main:hover { background: var(--accent-l); }
+.recent-item-name { font-size: 13px; font-weight: 600; color: var(--text); font-family: var(--mono); }
+.recent-item-meta { font-size: 11px; color: var(--muted); }
+.recent-item-delete {
+  display: flex; align-items: center; justify-content: center;
+  width: 36px; flex-shrink: 0; border: 0; border-left: 1px solid var(--border);
+  background: transparent; color: var(--muted); cursor: pointer;
+}
+.recent-item-delete:hover { background: #fee2e2; color: #dc2626; }
 
 /* ── Drop zone ────────────────────────────────────────────────────────────── */
 .drop-screen { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; }
