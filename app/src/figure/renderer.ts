@@ -23,6 +23,9 @@ export interface RenderOptions {
   skinColor: string;
   showGuideTicks?: boolean;
   showGuideLabels?: boolean;
+  /** When false, landmarks that fall back to canonical proportions are hidden,
+   *  so the figure only shows regions the user has actually measured. */
+  showCanonical?: boolean;
 }
 
 export interface FigureLandmarkCandidates {
@@ -152,35 +155,67 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
     strokeOpacity: 0.55,
   };
 
+  const showCanonical = opts.showCanonical ?? false;
+  const isYReal = (lm: Landmark) => lm.y !== null && !lm.ySource?.startsWith('canonical');
+  const measured = <T extends Landmark>(lms: T[]): T[] =>
+    showCanonical ? lms : lms.filter(lm => isYReal(lm) && lm.widthConfidence !== 'canonical');
+
   const paths: string[] = [];
   if (showGuideTicks) {
     paths.push(`<line x1="${axisX}" y1="${pad}" x2="${axisX}" y2="${pad + bodyHeight}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="4 3"/>`);
   }
 
-  paths.push(buildHipPath(figure.lowerBody.hip, pathOpts));
-  const crotch = figure.lowerBody.hip.find(landmark => landmark.id === 'crotch') ?? null;
-  paths.push(buildLegPaths(figure.lowerBody.leg, figure.lowerBody.legOffset, crotch, pathOpts));
-  const ankle = figure.lowerBody.leg.find(landmark => landmark.id === 'ankle') ?? null;
-  if (ankle && figure.lowerBody.foot) {
+  const hipLandmarks = measured(figure.lowerBody.hip);
+  if (hipLandmarks.length >= 2) paths.push(buildHipPath(hipLandmarks, pathOpts));
+  const crotch = hipLandmarks.find(landmark => landmark.id === 'crotch') ?? null;
+  const legLandmarks = measured(figure.lowerBody.leg);
+  if (legLandmarks.length >= 2) paths.push(buildLegPaths(legLandmarks, figure.lowerBody.legOffset, crotch, pathOpts));
+  const ankle = legLandmarks.find(landmark => landmark.id === 'ankle') ?? null;
+  if (ankle && figure.lowerBody.foot && figure.lowerBody.foot.widthConfidence !== 'canonical') {
     paths.push(buildFootPaths(ankle, figure.lowerBody.foot, figure.lowerBody.legOffset, pathOpts));
   }
 
-  paths.push(buildArmPath(figure.leftArm, { ...pathOpts, capSweep: 1 }));
-  paths.push(buildArmPath(figure.rightArm, { ...pathOpts, flipNormals: true, capSweep: 0 }));
-  const neckSide = figure.torso.outline.find(landmark => landmark.id === 'neck-side');
+  const leftArmLandmarks = measured(figure.leftArm.landmarks);
+  if (leftArmLandmarks.length >= 2) paths.push(buildArmPath({ ...figure.leftArm, landmarks: leftArmLandmarks }, { ...pathOpts, capSweep: 1 }));
+  const rightArmLandmarks = measured(figure.rightArm.landmarks);
+  if (rightArmLandmarks.length >= 2) paths.push(buildArmPath({ ...figure.rightArm, landmarks: rightArmLandmarks }, { ...pathOpts, flipNormals: true, capSweep: 0 }));
+  const torsoOutline = measured(figure.torso.outline);
+  const neckSide = torsoOutline.find(landmark => landmark.id === 'neck-side');
   if (neckSide) paths.push(buildNeckPath(figure.head, neckSide, pathOpts));
-  paths.push(buildHeadPath(figure.head, pathOpts));
-  paths.push(buildTorsoPath(figure.torso.outline, pathOpts));
+  if (figure.head.landmarks.some(lm => isYReal(lm) && lm.widthConfidence !== 'canonical') || showCanonical) paths.push(buildHeadPath(figure.head, pathOpts));
+  if (torsoOutline.length >= 2) paths.push(buildTorsoPath(torsoOutline, pathOpts));
 
-  if (figure.torso.neckline) {
+  if (figure.torso.neckline && (showCanonical || (isYReal(figure.torso.neckline.side) && figure.torso.neckline.side.widthConfidence !== 'canonical'))) {
     paths.push(buildNecklineCurve(figure.torso.neckline, pathOpts));
   }
-  if (figure.torso.neckBack && figure.torso.neckline) {
+  if (figure.torso.neckBack && figure.torso.neckline && (showCanonical || (isYReal(figure.torso.neckBack) && figure.torso.neckBack.widthConfidence !== 'canonical'))) {
     paths.push(buildNeckBackLines(figure.torso.neckline.side, figure.torso.neckBack, pathOpts));
   }
   figure.torso.interior.forEach(landmark => {
-    if (landmark.id === 'bustpoint') paths.push(buildBustpointMark(landmark, pathOpts));
+    if (landmark.id === 'bustpoint' && (showCanonical || (isYReal(landmark) && landmark.widthConfidence !== 'canonical'))) {
+      paths.push(buildBustpointMark(landmark, pathOpts));
+    }
   });
+
+  if (!showCanonical) {
+    const allLandmarks: Landmark[] = [
+      ...figure.head.landmarks,
+      ...(figure.torso.neckBack ? [figure.torso.neckBack] : []),
+      ...figure.torso.outline,
+      ...figure.torso.interior,
+      ...figure.lowerBody.hip,
+      ...figure.lowerBody.leg,
+      ...figure.leftArm.landmarks,
+      ...figure.rightArm.landmarks,
+    ];
+    const seenMarkers = new Set<string>();
+    for (const lm of allLandmarks) {
+      if (seenMarkers.has(lm.id) || !isYReal(lm) || lm.widthConfidence !== 'canonical') continue;
+      seenMarkers.add(lm.id);
+      const y = toY(lm.y!).toFixed(1);
+      paths.push(`<line x1="${(axisX - 10).toFixed(1)}" y1="${y}" x2="${(axisX + 10).toFixed(1)}" y2="${y}" stroke="#94a3b8" stroke-width="1" stroke-dasharray="2 2" stroke-opacity="0.45"/>`);
+    }
+  }
 
   const guides: Guide[] = [];
   const addGuide = (
@@ -208,12 +243,18 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   ]);
   const addBodyGuide = (landmark: Landmark) => {
     if (landmark.y == null || landmark.halfW == null || seenBodyLabels.has(landmark.id)) return;
+    if (!showCanonical && !isYReal(landmark)) return;
     seenBodyLabels.add(landmark.id);
     const y = toY(landmark.y);
+    const color = bodyGuideColor(landmark.id);
+    if (!showCanonical && landmark.widthConfidence === 'canonical') {
+      // Position marker: tick already drawn in the markers pass — just add the label
+      addGuide(landmark.id, 'right', axisX + 10, y, '', color, [axisX - 10, axisX + 10], 'right');
+      return;
+    }
     const halfWidth = landmark.halfW * scale;
     const x1 = axisX - halfWidth;
     const x2 = axisX + halfWidth;
-    const color = bodyGuideColor(landmark.id);
     addGuide(
       landmark.id,
       'right',
@@ -235,6 +276,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   const legOffset = figure.lowerBody.legOffset * scale;
   figure.lowerBody.leg.forEach(landmark => {
     if (landmark.y == null || landmark.halfW == null) return;
+    if (!showCanonical && !isYReal(landmark)) return;
     const y = toY(landmark.y);
     const halfWidth = landmark.halfW * scale;
     const leftX1 = axisX - legOffset - halfWidth;
@@ -254,7 +296,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   });
 
   const footReach = (figure.lowerBody.foot?.footLength ?? 0) * scale;
-  if (figure.lowerBody.foot) {
+  if (figure.lowerBody.foot && (showCanonical || figure.lowerBody.foot.widthConfidence !== 'canonical')) {
     const y = toY(0);
     const leftX = axisX - legOffset - footReach;
     const rightX = axisX + legOffset + footReach;
@@ -273,6 +315,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   const addArmGuides = (landmarks: ArmLandmark[], side: Guide['side']) => {
     landmarks.forEach((landmark, index) => {
       if (landmark.y == null || landmark.halfW == null) return;
+      if (!showCanonical && !isYReal(landmark)) return;
       const previous = landmarks[Math.max(0, index - 1)];
       const next = landmarks[Math.min(landmarks.length - 1, index + 1)];
       const dx = (next.x - previous.x) * scale;

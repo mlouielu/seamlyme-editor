@@ -34,12 +34,18 @@ export function resolveHeadLandmarks(R: R, totalHeight: number): HeadResolved {
   ], neckWC, CANONICAL_NECK);
 
   const landmarks: Landmark[] = [
-    buildLandmark('crown', totalHeight, [{ source: 'total height', value: totalHeight }], [], { yRatio: 1, halfWRatio: 0.01 }),
-    buildLandmark('head-mid', totalHeight, [{ source: 'center', value: cy }], [
-      ...(R.head_width > 0 ? [{ source: 'head_width', value: R.head_width, confidence: 'direct' as const }] : []),
-      ...circWidth(R, 'head_circ'),
-    ], { yRatio: cy/totalHeight, halfWRatio: headRx/totalHeight }),
-    buildLandmark('chin', totalHeight, [{ source: 'crown - head_length', value: totalHeight - headH }], [], { yRatio: (totalHeight - headH)/totalHeight, halfWRatio: 0.02 }),
+    buildLandmark('crown', totalHeight,
+      R.height > 0 ? [{ source: 'total height', value: totalHeight }] : [],
+      [], { yRatio: 1, halfWRatio: 0.01 }),
+    buildLandmark('head-mid', totalHeight,
+      R.height > 0 ? [{ source: 'center', value: cy }] : [],
+      [
+        ...(R.head_width > 0 ? [{ source: 'head_width', value: R.head_width, confidence: 'direct' as const }] : []),
+        ...circWidth(R, 'head_circ'),
+      ], { yRatio: cy/totalHeight, halfWRatio: headRx/totalHeight }),
+    buildLandmark('chin', totalHeight,
+      R.height > 0 ? [{ source: 'crown - head_length', value: totalHeight - headH }] : [],
+      [], { yRatio: (totalHeight - headH)/totalHeight, halfWRatio: 0.02 }),
   ];
 
   return {

@@ -86,6 +86,10 @@ export function resolveLeftArmLandmarks(
   const outerShoulderX = shoulderTipX;
   const outerShoulderY = shoulderTipY;
 
+  if (!(R.shoulder_tip_to_armfold_f > 0 && R.arm_upper_circ > 0)) {
+    return { landmarks: [], elbowIdx: -1, shoulderTip: [shoulderTipX, shoulderTipY], torsoAttachment };
+  }
+
   const upperArmLen = R.arm_shoulder_tip_to_elbow_bent > 0 ? R.arm_shoulder_tip_to_elbow_bent : R.arm_shoulder_tip_to_wrist_bent > 0 ? R.arm_shoulder_tip_to_wrist_bent * 0.6 : totalHeight * 0.223;
   const forearmLen = R.arm_elbow_to_wrist_bent > 0 ? R.arm_elbow_to_wrist_bent : (R.arm_shoulder_tip_to_wrist_bent > 0 && R.arm_shoulder_tip_to_elbow_bent > 0) ? R.arm_shoulder_tip_to_wrist_bent - R.arm_shoulder_tip_to_elbow_bent : totalHeight * 0.146;
 
