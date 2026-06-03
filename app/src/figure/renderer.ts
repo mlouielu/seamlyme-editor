@@ -53,6 +53,35 @@ function resolvedValues(doc: SeamlyDocument): R {
   return values;
 }
 
+function sourceMentions(candidates: ResolveCandidate[], name: string): boolean {
+  return candidates.some(c => (c.source.match(/@?[A-Za-z_][A-Za-z0-9_]*/g) ?? ([] as string[])).includes(name));
+}
+
+export function findLandmarkIdForMeasurement(doc: SeamlyDocument, measurementName: string): string | null {
+  const figure = resolveFullBody(resolvedValues(doc));
+  const bodyEntries: [string, Landmark][] = [
+    ...figure.head.landmarks.map(l => [l.id, l] as [string, Landmark]),
+    ...(figure.torso.neckBack ? [[figure.torso.neckBack.id, figure.torso.neckBack] as [string, Landmark]] : []),
+    ...figure.torso.outline.map(l => [l.id, l] as [string, Landmark]),
+    ...figure.torso.interior.map(l => [l.id, l] as [string, Landmark]),
+    ...figure.lowerBody.hip.map(l => [l.id, l] as [string, Landmark]),
+    ...figure.lowerBody.leg.map(l => [l.id, l] as [string, Landmark]),
+    ...(figure.lowerBody.foot ? [[figure.lowerBody.foot.id, figure.lowerBody.foot] as [string, Landmark]] : []),
+  ];
+  for (const [id, lm] of bodyEntries) {
+    if (sourceMentions(lm.yCandidates, measurementName) || sourceMentions(lm.wCandidates, measurementName)) return id;
+  }
+  for (const lm of figure.leftArm.landmarks) {
+    const all = [...lm.yCandidates, ...lm.wCandidates, ...(lm.lengthCandidates ?? [])];
+    if (sourceMentions(all, measurementName)) return `l-${lm.id}`;
+  }
+  for (const lm of figure.rightArm.landmarks) {
+    const all = [...lm.yCandidates, ...lm.wCandidates, ...(lm.lengthCandidates ?? [])];
+    if (sourceMentions(all, measurementName)) return `r-${lm.id}`;
+  }
+  return null;
+}
+
 export function getFigureLandmarkCandidates(doc: SeamlyDocument, id: string): FigureLandmarkCandidates | null {
   const figure = resolveFullBody(resolvedValues(doc));
   let landmark: Landmark | undefined;

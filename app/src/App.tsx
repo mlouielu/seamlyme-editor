@@ -387,6 +387,7 @@ function Layout() {
   const dispatch = useDispatch();
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<'diagram' | 'figure'>('diagram');
+  const [focusFormula, setFocusFormula] = useState(false);
   const debugParams = new URLSearchParams(window.location.search);
 
   useEffect(() => {
@@ -478,7 +479,7 @@ function Layout() {
               ) : (
                 <div className="workspace-figure-mobile">
                   <Profiler id="FigurePanel" onRender={logProfile}>
-                    <FigurePanel doc={doc} skinColor={skinColor} />
+                    <FigurePanel doc={doc} skinColor={skinColor} onRequestFocus={() => setFocusFormula(true)} />
                   </Profiler>
                 </div>
               )}
@@ -499,7 +500,10 @@ function Layout() {
             <EditorPanel />
           </Profiler>
           <Profiler id="MeasurementEditorPanel" onRender={logProfile}>
-            <MeasurementEditorPanel />
+            <MeasurementEditorPanel
+            requestFocusFormula={focusFormula}
+            onFocusDone={() => setFocusFormula(false)}
+          />
           </Profiler>
         </div>
         {!isMobile && showFigure && (
@@ -508,6 +512,7 @@ function Layout() {
               <FigurePanel
                 doc={doc}
                 skinColor={skinColor}
+                onRequestFocus={() => setFocusFormula(true)}
               />
             </Profiler>
           </div>

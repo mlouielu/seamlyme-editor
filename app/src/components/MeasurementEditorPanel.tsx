@@ -275,10 +275,16 @@ function MeasurementEditor({
   );
 }
 
-function MeasurementEditorPanel() {
+interface MeasurementEditorPanelProps {
+  requestFocusFormula?: boolean;
+  onFocusDone?: () => void;
+}
+
+function MeasurementEditorPanel({ requestFocusFormula = false, onFocusDone }: MeasurementEditorPanelProps) {
   const { doc, fileName, globalSearch, searchQuery, searchSnapshot, selected } = useAppState();
   const dispatch = useDispatch();
   const [pendingFocusFormula, setPendingFocusFormula] = useState(false);
+  const autoFocusFormula = pendingFocusFormula || requestFocusFormula;
   const measurement = doc && selected ? doc.measurements[selected] : null;
   const canRemove = measurement ? !idToCategory(measurement.id) : false;
   const dependents = doc && measurement
@@ -342,7 +348,7 @@ function MeasurementEditorPanel() {
       {doc && measurement ? (
         <MeasurementEditor measurement={measurement} measurements={doc.measurements}
           unit={doc.unit} dependents={dependents} placeholderZero={fileName === NEW_FILE_NAME}
-          autoFocusFormula={pendingFocusFormula} onFocusDone={() => setPendingFocusFormula(false)}
+          autoFocusFormula={autoFocusFormula} onFocusDone={() => { setPendingFocusFormula(false); onFocusDone?.(); }}
           nameExists={name => Boolean(doc.measurements[name])}
           onApply={(oldName, newName, value, description) => {
             dispatch({ type: 'APPLY_EDIT', oldName, newName, value, description });

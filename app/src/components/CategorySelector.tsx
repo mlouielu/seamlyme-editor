@@ -68,7 +68,7 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
   }
 
   function activeLabel(category: string): { chip: string; name: string } {
-    if (category === 'recommended') return { chip: '✓', name: `${recommendedComplete}/${recommended.length} start` };
+    if (category === 'recommended') return { chip: '✓', name: `${recommendedComplete}/${recommended.length} Viz` };
     if (category === 'errors') return { chip: '!', name: `${errorCount} errors` };
     if (category === 'custom') return { chip: '*', name: 'Custom' };
     if (category === 'all') return { chip: 'All', name: 'Measurements' };
@@ -109,7 +109,7 @@ function CategorySelector({ placement = 'desktop' }: CategorySelectorProps) {
                   <span className="cat-tab-name">{activeLabel('recommended').name}</span>
                 </>
               ) : (
-                <span className="cat-tab-letter">Start {recommendedComplete}/{recommended.length}</span>
+                <span className="cat-tab-letter">Viz {recommendedComplete}/{recommended.length}</span>
               )}
             </button>
           )}

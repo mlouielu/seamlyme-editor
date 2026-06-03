@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef } from 'react';
 import type { SeamlyMeasurement } from '@seamlyme/core';
 import { idToCategory } from '../catalog';
-import { RECOMMENDED_FIGURE_MEASUREMENTS } from '../recommended';
+import { RECOMMENDED_FIGURE_MEASUREMENTS, RECOMMENDED_GROUP_BY_NAME } from '../recommended';
 import { useAppState, useDispatch } from '../store';
 import { NEW_FILE_NAME } from '../config';
 
@@ -58,20 +58,14 @@ function EditorPanel() {
     ? Object.values(doc.measurements).filter(m => {
         if (globalSearch && searchQuery) return true;
         const cat = idToCategory(m.id);
-        if (activeCategory === 'recommended') return RECOMMENDED_FIGURE_MEASUREMENTS.includes(
-          m.name as typeof RECOMMENDED_FIGURE_MEASUREMENTS[number],
-        );
+        if (activeCategory === 'recommended') return RECOMMENDED_FIGURE_MEASUREMENTS.includes(m.name);
         if (activeCategory === 'errors') return Boolean(m.error);
         if (activeCategory === 'custom') return !cat;
         if (activeCategory !== 'all') return cat === activeCategory;
         return true;
       }).sort((a, b) => {
         if (activeCategory === 'recommended') {
-          return RECOMMENDED_FIGURE_MEASUREMENTS.indexOf(
-            a.name as typeof RECOMMENDED_FIGURE_MEASUREMENTS[number],
-          ) - RECOMMENDED_FIGURE_MEASUREMENTS.indexOf(
-            b.name as typeof RECOMMENDED_FIGURE_MEASUREMENTS[number],
-          );
+          return RECOMMENDED_FIGURE_MEASUREMENTS.indexOf(a.name) - RECOMMENDED_FIGURE_MEASUREMENTS.indexOf(b.name);
         }
         if (a.id && b.id) return a.id.localeCompare(b.id);
         if (a.id) return -1; if (b.id) return 1;
@@ -116,49 +110,58 @@ function EditorPanel() {
 
       <div className="measurement-list" role="list">
         {filteredRows.length === 0 && <div className="empty-cell">No measurements match your filters.</div>}
-        {filteredRows.map(m => {
+        {filteredRows.map((m, idx) => {
           const missing = !m.hasValue || (fileName === NEW_FILE_NAME && m.raw === '0');
+          const groupLabel = activeCategory === 'recommended' ? RECOMMENDED_GROUP_BY_NAME[m.name] : undefined;
+          const showHeader = groupLabel !== undefined && groupLabel !== RECOMMENDED_GROUP_BY_NAME[filteredRows[idx - 1]?.name];
           return (
-          <div key={m.name} role="listitem"
-            ref={selectedName === m.name ? selectedRowRef : null}
-            className={`measurement-list-row${selectedName === m.name ? ' is-selected' : ''}${highlighted === m.name ? ' is-highlighted' : ''}${missing ? ' is-missing' : ''}${m.error ? ' has-error' : ''}`}
-          >
-            <button type="button" className="measurement-list-select"
-              onClick={() => dispatch({
-                type: searchQuery ? 'SELECT_SEARCH_RESULT' : 'SELECT_MEASUREMENT',
-                name: m.name,
-              })}>
-              <code className="badge-id">{m.id || '-'}</code>
-              <span className="measurement-list-name">
-                <strong>{m.fullName || m.name}</strong>
-                <code>{m.name}</code>
-              </span>
-              <span className={`measurement-list-calculated${m.error ? ' is-error' : ''}`}
-                title={m.error ?? undefined}>
-                <CalculatedValue measurement={m} unit={doc.unit} placeholderZero={fileName === NEW_FILE_NAME} />
-              </span>
-            </button>
-            <div className="measurement-list-actions">
-              {m.hasValue && m.dependencies.length === 0 && !(fileName === NEW_FILE_NAME && m.raw === '0') && (
-                <button type="button" className="measurement-list-clear"
-                  title="Clear value"
-                  onClick={() => dispatch({ type: 'APPLY_EDIT', oldName: m.name, newName: m.name, value: '', description: m.desc })}>
-                  <svg viewBox="0 0 16 16" aria-hidden="true">
-                    <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/>
-                  </svg>
-                </button>
+            <div key={m.name}>
+              {showHeader && (
+                <div className="measurement-list-section-header" aria-hidden="true">
+                  {groupLabel}
+                </div>
               )}
-              {searchQuery && (
-                <button type="button" className="measurement-list-jump"
-                  title={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
-                  aria-label={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
-                  onClick={() => dispatch({ type: 'JUMP_FROM_SEARCH', name: m.name })}>
-                  <span aria-hidden="true">↗</span>
-                  {idToCategory(m.id) ?? '*'}
+              <div role="listitem"
+                ref={selectedName === m.name ? selectedRowRef : null}
+                className={`measurement-list-row${selectedName === m.name ? ' is-selected' : ''}${highlighted === m.name ? ' is-highlighted' : ''}${missing ? ' is-missing' : ''}${m.error ? ' has-error' : ''}`}
+              >
+                <button type="button" className="measurement-list-select"
+                  onClick={() => dispatch({
+                    type: searchQuery ? 'SELECT_SEARCH_RESULT' : 'SELECT_MEASUREMENT',
+                    name: m.name,
+                  })}>
+                  <code className="badge-id">{m.id || '-'}</code>
+                  <span className="measurement-list-name">
+                    <strong>{m.fullName || m.name}</strong>
+                    <code>{m.name}</code>
+                  </span>
+                  <span className={`measurement-list-calculated${m.error ? ' is-error' : ''}`}
+                    title={m.error ?? undefined}>
+                    <CalculatedValue measurement={m} unit={doc.unit} placeholderZero={fileName === NEW_FILE_NAME} />
+                  </span>
                 </button>
-              )}
+                <div className="measurement-list-actions">
+                  {m.hasValue && m.dependencies.length === 0 && !(fileName === NEW_FILE_NAME && m.raw === '0') && (
+                    <button type="button" className="measurement-list-clear"
+                      title="Clear value"
+                      onClick={() => dispatch({ type: 'APPLY_EDIT', oldName: m.name, newName: m.name, value: '', description: m.desc })}>
+                      <svg viewBox="0 0 16 16" aria-hidden="true">
+                        <path d="M3 4h10M6 4V3h4v1M5 4l.5 9h5L11 4"/>
+                      </svg>
+                    </button>
+                  )}
+                  {searchQuery && (
+                    <button type="button" className="measurement-list-jump"
+                      title={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
+                      aria-label={`Clear search and open ${idToCategory(m.id) ?? 'Custom'} category`}
+                      onClick={() => dispatch({ type: 'JUMP_FROM_SEARCH', name: m.name })}>
+                      <span aria-hidden="true">↗</span>
+                      {idToCategory(m.id) ?? '*'}
+                    </button>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
           );
         })}
       </div>

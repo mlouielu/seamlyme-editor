@@ -1,7 +1,8 @@
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import type { SeamlyDocument } from '@seamlyme/core';
-import { useDispatch } from '../store';
+import { useAppState, useDispatch } from '../store';
 import {
+  findLandmarkIdForMeasurement,
   getFigureLandmarkCandidates,
   renderFigure,
 } from '../figure/renderer';
@@ -20,9 +21,11 @@ const SKIN_PRESETS = [
 interface FigurePanelProps {
   doc: SeamlyDocument | null;
   skinColor: string;
+  onRequestFocus?: () => void;
 }
 
-function FigurePanel({ doc, skinColor }: FigurePanelProps) {
+function FigurePanel({ doc, skinColor, onRequestFocus }: FigurePanelProps) {
+  const { selected } = useAppState();
   const dispatch = useDispatch();
   const containerRef = useRef<HTMLDivElement>(null);
   const scrollRef    = useRef<HTMLDivElement>(null);
@@ -31,6 +34,12 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle');
   const [hideLabel, setHideLabel] = useState(false);
   const [hideGuideline, setHideGuideline] = useState(false);
+
+  // Sync editor selection → figure landmark highlight
+  useEffect(() => {
+    if (!doc || !selected) return;
+    setSelectedLandmarkId(findLandmarkIdForMeasurement(doc, selected));
+  }, [doc, selected]);
 
   // ── Pan / zoom state ────────────────────────────────────────────────────────
   const xform    = useRef({ tx: 0, ty: 0, scale: 1 });
@@ -229,7 +238,10 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
                       key={name}
                       type="button"
                       title={`Jump to ${name}`}
-                      onClick={() => dispatch({ type: 'SELECT_MEASUREMENT', name })}
+                      onClick={() => {
+                        dispatch({ type: 'SELECT_MEASUREMENT', name });
+                        onRequestFocus?.();
+                      }}
                     >
                       Jump
                     </button>
