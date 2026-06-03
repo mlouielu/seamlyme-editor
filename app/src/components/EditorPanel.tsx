@@ -48,7 +48,7 @@ function CalculatedValue({
   );
 }
 
-function EditorPanel() {
+function EditorPanel({ onRowClick }: { onRowClick?: () => void }) {
   const state = useAppState();
   const dispatch = useDispatch();
   const { doc, activeCategory, fileName, searchQuery, globalSearch, valueFilter, highlighted, selected: selectedName } = state;
@@ -126,10 +126,10 @@ function EditorPanel() {
                 className={`measurement-list-row${selectedName === m.name ? ' is-selected' : ''}${highlighted === m.name ? ' is-highlighted' : ''}${missing ? ' is-missing' : ''}${m.error ? ' has-error' : ''}`}
               >
                 <button type="button" className="measurement-list-select"
-                  onClick={() => dispatch({
-                    type: searchQuery ? 'SELECT_SEARCH_RESULT' : 'SELECT_MEASUREMENT',
-                    name: m.name,
-                  })}>
+                  onClick={() => {
+                    dispatch({ type: searchQuery ? 'SELECT_SEARCH_RESULT' : 'SELECT_MEASUREMENT', name: m.name });
+                    onRowClick?.();
+                  }}>
                   <code className="badge-id">{m.id || '-'}</code>
                   <span className="measurement-list-name">
                     <strong>{m.fullName || m.name}</strong>

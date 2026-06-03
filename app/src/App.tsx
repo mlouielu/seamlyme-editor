@@ -387,7 +387,8 @@ function Layout() {
   const dispatch = useDispatch();
   const isMobile = useIsMobile();
   const [mobileTab, setMobileTab] = useState<'diagram' | 'figure'>('diagram');
-  const [focusFormula, setFocusFormula] = useState(false);
+  const editorPanelRef = useRef<import('./components/MeasurementEditorPanel').MeasurementEditorPanelHandle>(null);
+  const requestFocusFormula = () => editorPanelRef.current?.focusFormula();
   const debugParams = new URLSearchParams(window.location.search);
 
   useEffect(() => {
@@ -479,7 +480,7 @@ function Layout() {
               ) : (
                 <div className="workspace-figure-mobile">
                   <Profiler id="FigurePanel" onRender={logProfile}>
-                    <FigurePanel doc={doc} skinColor={skinColor} onRequestFocus={() => setFocusFormula(true)} />
+                    <FigurePanel doc={doc} skinColor={skinColor} onRequestFocus={requestFocusFormula} />
                   </Profiler>
                 </div>
               )}
@@ -497,13 +498,10 @@ function Layout() {
           <CategorySelector placement="desktop" />
           <CategorySelector placement="mobile" />
           <Profiler id="EditorPanel" onRender={logProfile}>
-            <EditorPanel />
+            <EditorPanel onRowClick={requestFocusFormula} />
           </Profiler>
           <Profiler id="MeasurementEditorPanel" onRender={logProfile}>
-            <MeasurementEditorPanel
-            requestFocusFormula={focusFormula}
-            onFocusDone={() => setFocusFormula(false)}
-          />
+            <MeasurementEditorPanel ref={editorPanelRef} />
           </Profiler>
         </div>
         {!isMobile && showFigure && (
@@ -512,7 +510,7 @@ function Layout() {
               <FigurePanel
                 doc={doc}
                 skinColor={skinColor}
-                onRequestFocus={() => setFocusFormula(true)}
+                onRequestFocus={requestFocusFormula}
               />
             </Profiler>
           </div>

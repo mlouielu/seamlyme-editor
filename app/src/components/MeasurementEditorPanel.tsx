@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { forwardRef, memo, useImperativeHandle, useEffect, useRef, useState } from 'react';
 import type { SeamlyMeasurement } from '@seamlyme/core';
 import { idToCategory } from '../catalog';
 import { useAppState, useDispatch } from '../store';
@@ -275,16 +275,20 @@ function MeasurementEditor({
   );
 }
 
-interface MeasurementEditorPanelProps {
-  requestFocusFormula?: boolean;
-  onFocusDone?: () => void;
+export interface MeasurementEditorPanelHandle {
+  focusFormula: () => void;
 }
 
-function MeasurementEditorPanel({ requestFocusFormula = false, onFocusDone }: MeasurementEditorPanelProps) {
+const MeasurementEditorPanel = forwardRef<MeasurementEditorPanelHandle>(function MeasurementEditorPanel(_, ref) {
   const { doc, fileName, globalSearch, searchQuery, searchSnapshot, selected } = useAppState();
   const dispatch = useDispatch();
   const [pendingFocusFormula, setPendingFocusFormula] = useState(false);
-  const autoFocusFormula = pendingFocusFormula || requestFocusFormula;
+
+  useImperativeHandle(ref, () => ({
+    focusFormula: () => setPendingFocusFormula(true),
+  }));
+
+  const autoFocusFormula = pendingFocusFormula;
   const measurement = doc && selected ? doc.measurements[selected] : null;
   const canRemove = measurement ? !idToCategory(measurement.id) : false;
   const dependents = doc && measurement
@@ -348,7 +352,7 @@ function MeasurementEditorPanel({ requestFocusFormula = false, onFocusDone }: Me
       {doc && measurement ? (
         <MeasurementEditor measurement={measurement} measurements={doc.measurements}
           unit={doc.unit} dependents={dependents} placeholderZero={fileName === NEW_FILE_NAME}
-          autoFocusFormula={autoFocusFormula} onFocusDone={() => { setPendingFocusFormula(false); onFocusDone?.(); }}
+          autoFocusFormula={autoFocusFormula} onFocusDone={() => setPendingFocusFormula(false)}
           nameExists={name => Boolean(doc.measurements[name])}
           onApply={(oldName, newName, value, description) => {
             dispatch({ type: 'APPLY_EDIT', oldName, newName, value, description });
@@ -359,6 +363,6 @@ function MeasurementEditorPanel({ requestFocusFormula = false, onFocusDone }: Me
       )}
     </section>
   );
-}
+});
 
 export default memo(MeasurementEditorPanel);
