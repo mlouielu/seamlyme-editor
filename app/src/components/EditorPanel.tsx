@@ -10,11 +10,11 @@ function fmtVal(v: number | null | undefined): string {
   return v.toFixed(2);
 }
 
-function toCm(val: number, unit: string): string | null {
-  let cm: number | null = null;
-  if (unit === 'inch' || unit === 'in') cm = val * 2.54;
-  else if (unit === 'mm') cm = val / 10;
-  return cm !== null ? cm.toFixed(2) : null;
+function secondaryValue(val: number, unit: string): { value: string; unit: string } | null {
+  if (unit === 'inch' || unit === 'in') return { value: (val * 2.54).toFixed(2), unit: 'cm' };
+  if (unit === 'mm') return { value: (val / 25.4).toFixed(2), unit: 'in' };
+  if (unit === 'cm') return { value: (val / 2.54).toFixed(2), unit: 'in' };
+  return null;
 }
 
 function CalculatedValue({
@@ -28,7 +28,7 @@ function CalculatedValue({
   if (measurement.error) return <>{measurement.error}</>;
 
   const isFormula = measurement.dependencies.length > 0;
-  const cm = measurement.resolved != null ? toCm(measurement.resolved, unit) : null;
+  const secondary = measurement.resolved != null ? secondaryValue(measurement.resolved, unit) : null;
 
   return (
     <>
@@ -37,11 +37,11 @@ function CalculatedValue({
         <span className="measurement-list-calculated-number">{fmtVal(measurement.resolved)}</span>
         <span>{unit}</span>
       </span>
-      {cm && (
+      {secondary && (
         <span className="measurement-list-calculated-line is-secondary">
           <span className="measurement-list-calculated-prefix" />
-          <span className="measurement-list-calculated-number">{cm}</span>
-          <span>cm</span>
+          <span className="measurement-list-calculated-number">{secondary.value}</span>
+          <span>{secondary.unit}</span>
         </span>
       )}
     </>

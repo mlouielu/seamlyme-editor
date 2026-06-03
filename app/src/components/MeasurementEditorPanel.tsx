@@ -9,18 +9,18 @@ function fmtVal(v: number | null | undefined): string {
   return (v % 1 === 0) ? String(v) : v.toFixed(4).replace(/\.?0+$/, '');
 }
 
-function toCm(val: number, unit: string): string | null {
-  let cm: number | null = null;
-  if (unit === 'inch' || unit === 'in') cm = val * 2.54;
-  else if (unit === 'mm') cm = val / 10;
-  return cm !== null ? cm.toFixed(2) : null;
+function secondaryValue(val: number, unit: string): { value: string; unit: string } | null {
+  if (unit === 'inch' || unit === 'in') return { value: (val * 2.54).toFixed(2), unit: 'cm' };
+  if (unit === 'mm') return { value: (val / 25.4).toFixed(2), unit: 'in' };
+  if (unit === 'cm') return { value: (val / 2.54).toFixed(2), unit: 'in' };
+  return null;
 }
 
 function calculatedText(m: SeamlyMeasurement, unit: string): string {
   if (!m.hasValue) return 'Not set';
   if (m.error) return m.error;
-  const cm = m.resolved != null ? toCm(m.resolved, unit) : null;
-  return `= ${fmtVal(m.resolved)} ${unit}${cm ? ` (${cm} cm)` : ''}`;
+  const secondary = m.resolved != null ? secondaryValue(m.resolved, unit) : null;
+  return `= ${fmtVal(m.resolved)} ${unit}${secondary ? ` (${secondary.value} ${secondary.unit})` : ''}`;
 }
 
 interface MeasurementEditorProps {
