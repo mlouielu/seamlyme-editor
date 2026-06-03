@@ -24,6 +24,7 @@ export const RECOMMENDED_GROUPS: RecommendedGroup[] = [
     items: [
       'head_circ',
       'head_length',
+      'head_width',
     ],
   },
   {
@@ -73,6 +74,7 @@ export const RECOMMENDED_GROUPS: RecommendedGroup[] = [
     items: [
       'hand_length',
       'hand_palm_width',
+      'hand_palm_circ',
       'hand_circ',
     ],
   },
@@ -87,9 +89,11 @@ export const RECOMMENDED_GROUPS: RecommendedGroup[] = [
     label: 'Vertical Details',
     items: [
       'neck_front_to_highbust_f',
+      'neck_front_to_bust_f',
       'highbust_circ',
       'highbust_arc_f',
       'bustpoint_to_bustpoint',
+      'height_armpit',
       'lowbust_to_waist_f',
       'lowbust_circ',
       'lowbust_arc_f',
@@ -98,6 +102,8 @@ export const RECOMMENDED_GROUPS: RecommendedGroup[] = [
       'rib_arc_f',
       'height_waist_side',
       'height_highhip',
+      'waist_to_highhip_side',
+      'waist_to_hip_side',
       'highhip_circ',
       'highhip_arc_f',
       'height_gluteal_fold',
@@ -127,13 +133,14 @@ export const RECOMMENDED_GROUPS: RecommendedGroup[] = [
     ],
   },
   {
-    label: 'Direct Width',
+    label: 'Horizontal',
     items: [
       'width_bust',
       'width_waist',
       'width_hip',
       'width_shoulder',
       'neck_width',
+      'neck_front_to_shoulder_tip_f'
     ],
   },
 ];
