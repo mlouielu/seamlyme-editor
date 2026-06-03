@@ -217,22 +217,24 @@ function FigurePanel({ doc, skinColor }: FigurePanelProps) {
               className={candidate.missing ? 'is-missing' : candidate.used ? 'is-used' : undefined}
             >
               <td className="figure-candidate-mark">{candidate.missing ? 'x' : candidate.used ? '*' : '-'}</td>
-              <td><code>{candidate.source}</code></td>
-              <td className="figure-candidate-value">
-                {candidate.missing ? '-' : candidate.value.toFixed(3)}
-              </td>
-              <td className="figure-candidate-kind">{candidate.confidence ?? ''}</td>
-              <td className="figure-candidate-actions">
-                {candidateVariables(candidate).map(name => (
-                  <button
-                    key={name}
-                    type="button"
-                    title={`Jump to ${name}`}
-                    onClick={() => dispatch({ type: 'SELECT_MEASUREMENT', name })}
-                  >
-                    Jump
-                  </button>
-                ))}
+              <td className="figure-candidate-formula"><code>{candidate.source}</code></td>
+              <td className="figure-candidate-meta">
+                <span className="figure-candidate-value">
+                  {candidate.missing ? '-' : candidate.value.toFixed(3)}
+                </span>
+                <span className="figure-candidate-kind">{candidate.confidence ?? ''}</span>
+                <span className="figure-candidate-actions">
+                  {candidateVariables(candidate).map(name => (
+                    <button
+                      key={name}
+                      type="button"
+                      title={`Jump to ${name}`}
+                      onClick={() => dispatch({ type: 'SELECT_MEASUREMENT', name })}
+                    >
+                      Jump
+                    </button>
+                  ))}
+                </span>
               </td>
             </tr>
           ))}

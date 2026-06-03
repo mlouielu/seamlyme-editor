@@ -645,14 +645,30 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .figure-candidates-header button { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 14px; }
 .figure-candidates-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .figure-candidates h3 { margin: 0 0 4px; color: var(--muted); font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
-.figure-candidate-table { width: 100%; border-collapse: collapse; }
-.figure-candidate-table td { padding: 2px 4px; border-top: 1px solid rgba(0,0,0,.06); vertical-align: top; }
-.figure-candidate-table code { font-size: 10px; white-space: normal; overflow-wrap: anywhere; }
-.figure-candidate-mark { width: 10px; color: var(--muted); font-family: var(--mono); }
-.figure-candidate-value { text-align: right; white-space: nowrap; font-family: var(--mono); }
-.figure-candidate-kind { width: 48px; color: var(--muted); font-size: 10px; }
-.figure-candidate-actions { text-align: right; white-space: nowrap; }
-.figure-candidate-actions button { margin-left: 3px; padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface); color: var(--accent); cursor: pointer; font-size: 10px; }
+.figure-candidate-table { display: block; width: 100%; }
+.figure-candidate-table tbody { display: block; }
+.figure-candidate-table tr {
+  display: grid;
+  grid-template-columns: 1.4em 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 4px; row-gap: 2px;
+  padding: 4px 0;
+  border-top: 1px solid rgba(0,0,0,.06);
+}
+.figure-candidate-table td { display: block; padding: 0; border: 0; }
+.figure-candidate-mark { grid-column: 1; grid-row: 1; color: var(--muted); font-family: var(--mono); font-size: 10px; padding-top: 1px; }
+.figure-candidate-formula { grid-column: 2; grid-row: 1; }
+.figure-candidate-formula code { font-size: 10px; white-space: normal; overflow-wrap: anywhere; word-break: break-all; }
+.figure-candidate-table td.figure-candidate-meta {
+  grid-column: 2; grid-row: 2;
+  display: flex; align-items: baseline; flex-wrap: nowrap; gap: 6px;
+}
+.figure-candidate-value { font-family: var(--mono); font-size: 10px; white-space: nowrap; color: #A9004B}
+.figure-candidate-value::before { content: "= "; }
+
+.figure-candidate-kind { color: var(--muted); font-size: 10px; white-space: nowrap; }
+.figure-candidate-actions { display: flex; gap: 3px; }
+.figure-candidate-actions button { padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; background: var(--surface); color: var(--accent); cursor: pointer; font-size: 10px; }
 .figure-candidate-actions button:hover { background: var(--accent-l); }
 .figure-candidate-table tr.is-used { color: #166534; font-weight: 700; }
 .figure-candidate-table tr.is-missing { color: var(--muted); opacity: .65; }
