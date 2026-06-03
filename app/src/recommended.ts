@@ -1,41 +1,33 @@
 /**
- * Direct inputs consumed by the generated body figure.
- * Default-template formulas are intentionally excluded.
+ * All measurement variables directly consumed by the body figure renderer.
+ * Ordered by rendering priority: coarse silhouette first, fine detail last.
  */
 export const RECOMMENDED_FIGURE_MEASUREMENTS = [
-  // 1. Coarse silhouette: enough to reveal a recognizable torso and legs quickly
+  // 1. Vertical skeleton — drives overall proportions immediately
   'height',
   'height_neck_back',
+  'height_neck_front',
+  'height_neck_side',
+  'height_shoulder_tip',
   'height_bustpoint',
+  'height_armpit',
   'height_waist_side',
+  'height_waist_front',
+  'height_waist_side_to_knee',
   'height_highhip',
   'height_hip',
-  'leg_crotch_to_floor',
-  'bust_arc_f',
-  'waist_arc_f',
-  'hip_arc_f',
   'height_gluteal_fold',
   'height_knee',
   'height_calf',
   'height_ankle_high',
   'height_ankle',
-  'leg_thigh_upper_circ',
-  'leg_thigh_mid_circ',
-  'leg_knee_circ',
-  'leg_calf_circ',
-  'leg_ankle_high_circ',
-  'leg_ankle_circ',
+  'leg_crotch_to_floor',
 
-  // 2. Torso detail: add missing guide lines and improve silhouette projection
-  'height_neck_front',
-  'height_neck_side',
-  'height_shoulder_tip',
-  'neck_front_to_shoulder_tip_f',
-  'shoulder_tip_to_shoulder_tip_f',
-  'height_armpit',
-  'height_waist_front',
+  // 2. Torso arcs & widths — silhouette shape
+  'bust_arc_f',
+  'waist_arc_f',
+  'hip_arc_f',
   'neck_arc_f',
-  'neck_width',
   'highbust_arc_f',
   'lowbust_arc_f',
   'rib_arc_f',
@@ -43,35 +35,71 @@ export const RECOMMENDED_FIGURE_MEASUREMENTS = [
   'width_bust',
   'width_waist',
   'width_hip',
+  'width_shoulder',
+  'neck_width',
+  'neck_front_to_shoulder_tip_f',
+  'shoulder_tip_to_shoulder_tip_f',
+  'shoulder_tip_to_armfold_f',
+
+  // 3. Torso circumferences
   'bust_circ',
+  'highbust_circ',
+  'lowbust_circ',
+  'rib_circ',
   'waist_circ',
+  'highhip_circ',
   'hip_circ',
 
-  // 3. Neck, shoulder, and bust-point refinements
-  'width_shoulder',
-  'neck_side_to_waist_f',
-  'neck_side_to_waist_side_f',
-  'neck_front_to_highbust_f',
+  // 4. Torso vertical offsets & bust-point
+  'bust_to_waist_f',
   'neck_front_to_bust_f',
   'lowbust_to_waist_f',
   'bustpoint_to_bustpoint',
+  'bustpoint_to_bustpoint_half',
+  'waist_to_highhip_side',
+  'waist_to_hip_side',
 
-  // 4. Arms and hands
-  'arm_shoulder_tip_to_wrist',
+  // 5. Leg circumferences
+  'leg_thigh_upper_circ',
+  'leg_thigh_mid_circ',
+  'leg_knee_circ',
+  'leg_knee_small_circ',
+  'leg_calf_circ',
+  'leg_ankle_high_circ',
+  'leg_ankle_circ',
+
+  // 6. Arm lengths
   'arm_shoulder_tip_to_elbow',
-  'body_armfold_circ',
-  'arm_elbow_circ_bent',
-  'arm_wrist_circ',
-  'hand_length',
-  'arm_armpit_to_wrist',
-  'arm_shoulder_tip_to_wrist_bent',
   'arm_shoulder_tip_to_elbow_bent',
+  'arm_shoulder_tip_to_wrist_bent',
+  'arm_armpit_to_elbow',
+  'arm_elbow_to_wrist',
+  'arm_elbow_to_wrist_bent',
+  'arm_elbow_to_wrist_inside',
 
-  // 5. Feet
+  // 7. Arm circumferences
+  'arm_upper_circ',
+  'arm_above_elbow_circ',
+  'arm_elbow_circ',
+  'arm_elbow_circ_bent',
+  'arm_lower_circ',
+  'arm_wrist_circ',
+
+  // 8. Hand
+  'hand_length',
+  'hand_palm_length',
+  'hand_palm_width',
+  'hand_circ',
+  'hand_palm_circ',
+
+  // 9. Head
+  'head_width',
+  'head_length',
+  'head_circ',
+  'head_chin_to_neck_back',
+
+  // 10. Foot
   'foot_length',
   'foot_circ',
-
-  // 6. Final refinements
-  'head_width',
-  'body_bust_circ',
+  'foot_instep_circ',
 ] as const;
