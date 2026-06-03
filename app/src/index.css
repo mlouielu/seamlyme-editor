@@ -154,6 +154,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   padding: 7px 13px; font-size: 11px; font-weight: 700; color: var(--muted);
   text-transform: uppercase; letter-spacing: .07em;
   background: var(--bg); border-bottom: 1px solid var(--border); flex-shrink: 0;
+  min-height: 4vh;
 }
 .panel-header-hint { font-size: 10px; font-weight: 400; text-transform: none; letter-spacing: 0; opacity: .7; }
 .muted { color: var(--muted); }
@@ -701,6 +702,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   .workspace-right { display: none; }
   .workspace-left > * { min-width: 0; min-height: 0; }
   .workspace-diagram { min-height: 0; }
+  .panel-header { min-height: 2vh; }
   .diagram-panel { min-height: 0; height: 100%; overflow: hidden; }
   .diagram-status { display: none; }
   .editor-panel { width: 100%; flex: none; border-top: 1px solid var(--border); }
