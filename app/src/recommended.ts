@@ -3,19 +3,25 @@
  * Ordered by rendering priority: coarse silhouette first, fine detail last.
  */
 export const RECOMMENDED_FIGURE_MEASUREMENTS = [
-  // 1. Vertical skeleton — drives overall proportions immediately
+  // 1. Group with common measurements
   'height',
+  'bust_arc_f',
+  'height_bustpoint',
+  'waist_arc_f',
+  'height_waist_front',
+  'hip_arc_f',
+  'height_hip',
+
+  // 1. Vertical skeleton — drives overall proportions immediately
   'height_neck_back',
   'height_neck_front',
   'height_neck_side',
   'height_shoulder_tip',
-  'height_bustpoint',
+
   'height_armpit',
   'height_waist_side',
-  'height_waist_front',
   'height_waist_side_to_knee',
   'height_highhip',
-  'height_hip',
   'height_gluteal_fold',
   'height_knee',
   'height_calf',
@@ -24,9 +30,6 @@ export const RECOMMENDED_FIGURE_MEASUREMENTS = [
   'leg_crotch_to_floor',
 
   // 2. Torso arcs & widths — silhouette shape
-  'bust_arc_f',
-  'waist_arc_f',
-  'hip_arc_f',
   'neck_arc_f',
   'highbust_arc_f',
   'lowbust_arc_f',
