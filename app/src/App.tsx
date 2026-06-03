@@ -2,7 +2,7 @@ import { Profiler, useCallback, useEffect, useMemo, useRef, useState, type Profi
 import { createPortal } from 'react-dom';
 import { createDocument, parseSmis, serializeSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
-import { DEFAULT_SAVE_NAME, NEW_FILE_NAME } from './config';
+import { APP_NAME, DEFAULT_SAVE_NAME, NEW_FILE_NAME } from './config';
 import { loadRecentMetas, loadSession, deleteSession, type SessionMeta } from './autosave';
 import EditorPanel   from './components/EditorPanel';
 import DiagramPanel  from './components/DiagramPanel';
@@ -25,7 +25,7 @@ type Unit = 'cm' | 'mm' | 'inch';
 
 function loadNewSheet(dispatch: ReturnType<typeof useDispatch>, unit: Unit = 'cm') {
   dispatch({ type: 'LOAD', doc: createDocument({ unit, template: 'default', defaultValue: 0 }), fileName: NEW_FILE_NAME });
-  document.title = `${NEW_FILE_NAME} - SeamlyMe`;
+  document.title = `${NEW_FILE_NAME} — ${APP_NAME}`;
 }
 
 // ── New file dialog ────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ function DropZone() {
       try {
         const doc = parseSmis(e.target!.result as string);
         dispatch({ type: 'LOAD', doc, fileName: file.name });
-        document.title = `${file.name} — SeamlyMe`;
+        document.title = `${file.name} — ${APP_NAME}`;
       } catch (err) {
         alert('Could not parse file: ' + (err instanceof Error ? err.message : err));
       }
@@ -111,7 +111,7 @@ function DropZone() {
     const data = loadSession(id);
     if (!data) { alert('Could not restore session.'); return; }
     dispatch({ type: 'RESTORE_SESSION', data });
-    document.title = `${data.current.fileName} — SeamlyMe`;
+    document.title = `${data.current.fileName} — ${APP_NAME}`;
     setShowRecentDialog(false);
   }
 
@@ -122,7 +122,7 @@ function DropZone() {
           <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
         <h2>Drop your .smis file here</h2>
-        <p>SeamlyMe body measurements · formulas evaluated automatically</p>
+        <p>{APP_NAME} body measurements · formulas evaluated automatically</p>
         <div className="drop-zone-actions">
           <label className="btn primary">
             Browse file…
@@ -217,7 +217,7 @@ function Header() {
     const data = loadSession(id);
     if (!data) { alert('Could not restore session.'); return; }
     dispatch({ type: 'RESTORE_SESSION', data });
-    document.title = `${data.current.fileName} — SeamlyMe`;
+    document.title = `${data.current.fileName} — ${APP_NAME}`;
     setShowRecentDialog(false);
   }
 
@@ -236,7 +236,7 @@ function Header() {
       try {
         const loaded = parseSmis(ev.target!.result as string);
         dispatch({ type: 'LOAD', doc: loaded, fileName: file.name });
-        document.title = `${file.name} — SeamlyMe`;
+        document.title = `${file.name} — ${APP_NAME}`;
       } catch (err) {
         alert('Could not parse file: ' + (err instanceof Error ? err.message : err));
       }
@@ -271,7 +271,7 @@ function Header() {
   return (
     <header className="app-header">
       <div>
-        <span className="app-title">SeamlyMe Editor</span>
+        <span className="app-title">{APP_NAME}</span>
         {fileName && <span className="app-filename">{fileName}</span>}
       </div>
       {doc && (
