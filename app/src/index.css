@@ -43,6 +43,8 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   padding: 10px 18px; background: var(--surface);
   border-bottom: 1px solid var(--border); flex-shrink: 0;
 }
+.app-title-group { display: flex; align-items: center; gap: 8px; }
+.app-logo { width: 24px; height: 24px; border-radius: 5px; flex-shrink: 0; }
 .app-title { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
 .app-filename { font-size: 12px; color: var(--muted); margin-left: 8px; font-family: var(--mono); }
 .header-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
@@ -114,6 +116,9 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-recent { max-width: 420px; }
 .dialog-help { max-width: 480px; }
+.about-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.about-header .dialog-title { margin: 0; }
+.about-logo { width: 48px; height: 48px; border-radius: 10px; flex-shrink: 0; }
 .help-steps { margin: 0 0 24px; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
 .help-steps li { font-size: 13px; line-height: 1.5; color: var(--text); }
 .help-steps li strong { color: var(--text); }

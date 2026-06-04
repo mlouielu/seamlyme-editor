@@ -257,7 +257,10 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
   return createPortal(
     <div className="dialog-backdrop" onMouseDown={onClose}>
       <div className="dialog" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal aria-label="About">
-        <h2 className="dialog-title">{APP_NAME}</h2>
+        <div className="about-header">
+          <img src="/icons/icon-192.png" alt="" className="about-logo" aria-hidden="true" />
+          <h2 className="dialog-title">{APP_NAME}</h2>
+        </div>
         <p className="dialog-body">
           A web-based editor for Seamly2D body measurement files (<code>.smis</code>).
           Enter measurements and formulas, preview how they map onto the body figure, and
@@ -348,7 +351,8 @@ function Header() {
 
   return (
     <header className="app-header">
-      <div>
+      <div className="app-title-group">
+        <img src="/icons/icon-192.png" alt="" className="app-logo" aria-hidden="true" />
         <span className="app-title">{APP_NAME}</span>
         {fileName && <span className="app-filename">{fileName}</span>}
       </div>
