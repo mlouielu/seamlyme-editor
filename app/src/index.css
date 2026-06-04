@@ -330,13 +330,15 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .raw-cell-input.is-modified { color: #0369a1; }
 
 /* Compact measurement list + bottom editor */
-.measurement-list { flex: 1; min-height: 0; overflow: auto; padding: 10px; background: var(--surface); }
+.measurement-list { flex: 1; min-height: 0; overflow: auto; background: var(--surface); }
 .measurement-list-section-header {
-  padding: 4px 8px;
+    padding: 4px 8px;
+    min-height:5em;
+    display: flex;
+    align-items: center;
   font-size: 10px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--accent); background: var(--accent-l);
-  border-left: 3px solid var(--accent);
-  margin-top: 8px;
+  border-left: 8px solid var(--accent);
 }
 .measurement-list-row {
   display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: stretch;
@@ -730,7 +732,6 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
     overflow-x: auto; min-height: 0;
   }
   .editor-toolbar { display: none; }
-  .measurement-list { padding: 0 6px; }
   .measurement-list-select { padding: 6px 4px; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 6px; }
   .measurement-list-name strong { font-size: 11px; }
   .measurement-list-calculated { width: 112px; max-width: 112px; overflow: hidden; text-overflow: ellipsis; font-size: 11px; }
