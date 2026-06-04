@@ -1,4 +1,4 @@
-import { Profiler, useCallback, useEffect, useMemo, useRef, useState, type ProfilerOnRenderCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createDocument, parseSmis, serializeSmis } from '@seamlyme/core';
 import { AppProvider, useAppState, useDispatch } from './store';
@@ -10,16 +10,6 @@ import FigurePanel   from './components/FigurePanel';
 import MeasurementEditorPanel from './components/MeasurementEditorPanel';
 import CategorySelector from './components/CategorySelector';
 
-const logProfile: ProfilerOnRenderCallback = (
-  id,
-  phase,
-  actualDuration,
-  baseDuration,
-) => {
-  console.log(
-    `[profile] ${id} ${phase}: actual=${actualDuration.toFixed(1)}ms base=${baseDuration.toFixed(1)}ms`,
-  );
-};
 
 type Unit = 'cm' | 'mm' | 'inch';
 
@@ -588,48 +578,36 @@ function Layout() {
               {mobileTab === 'diagram' ? (
                 showDiagram && (
                   <div className="workspace-diagram">
-                    <Profiler id="DiagramPanel" onRender={logProfile}>
-                      <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
-                        selected={selected} missingVariables={missingVariables} />
-                    </Profiler>
+                    <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
+                      selected={selected} missingVariables={missingVariables} />
                   </div>
                 )
               ) : (
                 <div className="workspace-figure-mobile">
-                  <Profiler id="FigurePanel" onRender={logProfile}>
-                    <FigurePanel doc={doc} skinColor={skinColor} onRequestFocus={requestFocusFormula} />
-                  </Profiler>
+                  <FigurePanel doc={doc} skinColor={skinColor} onRequestFocus={requestFocusFormula} />
                 </div>
               )}
             </div>
           ) : (
             showDiagram && (
               <div className="workspace-diagram">
-                <Profiler id="DiagramPanel" onRender={logProfile}>
-                  <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
-                    selected={selected} missingVariables={missingVariables} />
-                </Profiler>
+                <DiagramPanel activeCategory={activeCategory} highlighted={highlighted}
+                  selected={selected} missingVariables={missingVariables} />
               </div>
             )
           )}
           <CategorySelector placement="desktop" />
           <CategorySelector placement="mobile" />
-          <Profiler id="EditorPanel" onRender={logProfile}>
-            <EditorPanel onRowClick={requestFocusFormula} />
-          </Profiler>
-          <Profiler id="MeasurementEditorPanel" onRender={logProfile}>
-            <MeasurementEditorPanel ref={editorPanelRef} />
-          </Profiler>
+          <EditorPanel onRowClick={requestFocusFormula} />
+          <MeasurementEditorPanel ref={editorPanelRef} />
         </div>
         {!isMobile && showFigure && (
           <div className="workspace-right">
-            <Profiler id="FigurePanel" onRender={logProfile}>
-              <FigurePanel
-                doc={doc}
-                skinColor={skinColor}
-                onRequestFocus={requestFocusFormula}
-              />
-            </Profiler>
+            <FigurePanel
+              doc={doc}
+              skinColor={skinColor}
+              onRequestFocus={requestFocusFormula}
+            />
           </div>
         )}
       </div>
