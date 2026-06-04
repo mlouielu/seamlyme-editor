@@ -61,6 +61,8 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   cursor: pointer; font-family: inherit; font-size: 13px; text-align: left;
 }
 .header-dropdown-item:hover { background: var(--bg); }
+.header-dropdown-divider { height: 1px; background: var(--border); margin: 4px 0; }
+.header-help-actions { display: flex; gap: 4px; }
 
 .pill {
   display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px;
@@ -111,6 +113,15 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .dialog-unit-option.is-selected .dialog-unit-label { color: var(--accent); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; }
 .dialog-recent { max-width: 420px; }
+.dialog-help { max-width: 480px; }
+.help-steps { margin: 0 0 24px; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; }
+.help-steps li { font-size: 13px; line-height: 1.5; color: var(--text); }
+.help-steps li strong { color: var(--text); }
+.help-steps code, .help-steps kbd {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--bg); border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px;
+}
 .recent-list { list-style: none; margin: 0 0 20px; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .recent-item { display: flex; align-items: stretch; border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .recent-item:hover { border-color: #c4b5fd; }
@@ -687,6 +698,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
   .app-filename, .header-pills { display: none; }
   .header-history { margin-left: auto; }
   .header-file-actions { display: none; }
+  .header-help-actions { display: none; }
   .header-hamburger-wrap { display: block; }
   .debug-toolbar { display: none; }
   .category-selector-shell-desktop { display: none; }

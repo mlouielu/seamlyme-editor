@@ -203,6 +203,82 @@ function RecentSessionsDialog({ onRestore, onClose }: RecentSessionsDialogProps)
   );
 }
 
+// ── How to Use dialog ─────────────────────────────────────────────────────────
+
+function HowToUseDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="dialog-backdrop" onMouseDown={onClose}>
+      <div className="dialog dialog-help" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal aria-label="How to use">
+        <h2 className="dialog-title">How to use {APP_NAME}</h2>
+        <ol className="help-steps">
+          <li>
+            <strong>Open a file</strong> — drop a <code>.smis</code> file onto the app, click <em>Browse file…</em>, or start fresh with <em>New</em>.
+          </li>
+          <li>
+            <strong>Select a measurement</strong> — click any row in the list or click a highlighted region in the body diagram. The editor panel on the right shows the selected measurement.
+          </li>
+          <li>
+            <strong>Enter a value or formula</strong> — type a plain number (<code>92</code>) or a formula referencing other measurements (<code>bust / 2 + 5</code>). Formulas are evaluated and ordered automatically.
+          </li>
+          <li>
+            <strong>Switch categories</strong> — use the category tabs above the list to filter measurements by body region, or choose <em>Viz</em> for step-by-step measurements for visualizing body figure.
+          </li>
+          <li>
+            <strong>Save your work</strong> — click <em>Save</em> in the header to download the updated <code>.smis</code> file. Sessions are also autosaved locally so you can resume via <em>Recent</em>.
+          </li>
+          <li>
+            <strong>Undo / Redo</strong> — use the arrow buttons in the header or <kbd>Ctrl Z</kbd> / <kbd>Ctrl Shift Z</kbd>.
+          </li>
+        </ol>
+        <div className="dialog-actions">
+          <button className="btn primary" onClick={onClose}>Got it</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── About dialog ──────────────────────────────────────────────────────────────
+
+function AboutDialog({ onClose }: { onClose: () => void }) {
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) { if (e.key === 'Escape') onClose(); }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return createPortal(
+    <div className="dialog-backdrop" onMouseDown={onClose}>
+      <div className="dialog" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal aria-label="About">
+        <h2 className="dialog-title">{APP_NAME}</h2>
+        <p className="dialog-body">
+          A web-based editor for Seamly2D body measurement files (<code>.smis</code>).
+          Enter measurements and formulas, preview how they map onto the body figure, and
+          export the updated file back to Seamly2D.
+        </p>
+        <p className="dialog-body">
+          All data stays on your device — no files are uploaded to any server.
+          Sessions are autosaved in your browser's local storage.
+        </p>
+        <p className="dialog-body">
+          GitHub: <a href="https://github.com/mlouielu/seamlyme-editor">SeamlyMe Editor</a>
+        </p>
+        <div className="dialog-actions">
+          <button className="btn primary" onClick={onClose}>Close</button>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 // ── Header ────────────────────────────────────────────────────────────────────
 
 function Header() {
@@ -211,6 +287,8 @@ function Header() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [showNewDialog, setShowNewDialog] = useState(false);
   const [showRecentDialog, setShowRecentDialog] = useState(false);
+  const [showHelpDialog, setShowHelpDialog] = useState(false);
+  const [showAboutDialog, setShowAboutDialog] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   function handleRestore(id: string) {
@@ -319,6 +397,32 @@ function Header() {
           <button className="btn" onClick={() => setShowNewDialog(true)}>New</button>
         </div>
       )}
+      <div className="header-help-actions">
+        <button
+          className="btn btn-icon"
+          aria-label="How to use"
+          title="How to use"
+          onClick={() => setShowHelpDialog(true)}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+            <line x1="12" y1="17" x2="12.01" y2="17"/>
+          </svg>
+        </button>
+        <button
+          className="btn btn-icon"
+          aria-label="About"
+          title="About"
+          onClick={() => setShowAboutDialog(true)}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </button>
+      </div>
       {doc && (
         <div className="header-hamburger-wrap" ref={menuRef}>
           <button
@@ -347,6 +451,13 @@ function Header() {
               <button className="header-dropdown-item" onClick={() => { setMenuOpen(false); setShowNewDialog(true); }}>
                 New
               </button>
+              <div className="header-dropdown-divider" />
+              <button className="header-dropdown-item" onClick={() => { setMenuOpen(false); setShowHelpDialog(true); }}>
+                How to Use
+              </button>
+              <button className="header-dropdown-item" onClick={() => { setMenuOpen(false); setShowAboutDialog(true); }}>
+                About
+              </button>
             </div>
           )}
         </div>
@@ -363,6 +474,8 @@ function Header() {
           onClose={() => setShowRecentDialog(false)}
         />
       )}
+      {showHelpDialog && <HowToUseDialog onClose={() => setShowHelpDialog(false)} />}
+      {showAboutDialog && <AboutDialog onClose={() => setShowAboutDialog(false)} />}
     </header>
   );
 }
