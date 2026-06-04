@@ -1,0 +1,13 @@
+{
+  "name": "SeamlyMe Editor",
+  "short_name": "SeamlyMe",
+  "description": "Interactive body measurement editor for Seamly2D",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4f4f5",
+  "theme_color": "#6d28d9",
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
