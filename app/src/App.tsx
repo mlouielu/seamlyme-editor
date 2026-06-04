@@ -248,7 +248,7 @@ function AboutDialog({ onClose }: { onClose: () => void }) {
     <div className="dialog-backdrop" onMouseDown={onClose}>
       <div className="dialog" onMouseDown={e => e.stopPropagation()} role="dialog" aria-modal aria-label="About">
         <div className="about-header">
-          <img src="/icons/icon-192.png" alt="" className="about-logo" aria-hidden="true" />
+          <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" className="about-logo" aria-hidden="true" />
           <h2 className="dialog-title">{APP_NAME}</h2>
         </div>
         <p className="dialog-body">
@@ -342,7 +342,7 @@ function Header() {
   return (
     <header className="app-header">
       <div className="app-title-group">
-        <img src="/icons/icon-192.png" alt="" className="app-logo" aria-hidden="true" />
+        <img src={`${import.meta.env.BASE_URL}icons/icon-192.png`} alt="" className="app-logo" aria-hidden="true" />
         <span className="app-title">{APP_NAME}</span>
         {fileName && <span className="app-filename">{fileName}</span>}
       </div>
