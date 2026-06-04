@@ -163,7 +163,7 @@ function layoutLabels(guides: Guide[], minY: number, maxY: number, gap: number):
 export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   const values = resolvedValues(doc);
   const figure = resolveFullBody(values);
-  const skinColor = opts.skinColor || '#f2c6a0';
+  const skinColor = escXml(opts.skinColor || '#f2c6a0');
   const strokeColor = '#5f3a2d';
   const showGuideTicks = opts.showGuideTicks ?? true;
   const showGuideLabels = opts.showGuideLabels ?? true;
