@@ -29,19 +29,18 @@ export interface Landmark {
   widthConfidence: WidthConfidence;
 }
 
-export interface YCandidateDef { source: string; value: number }
+export interface YCandidateDef { source: string; value: number; missing?: boolean }
 export interface WCandidateDef { source: string; value: number; confidence: WidthConfidence; missing?: boolean }
 
 // ── Resolution Helpers ────────────────────────────────────────────────────────
 
 export function pickY(candidates: YCandidateDef[]): { y: number; source: string; all: ResolveCandidate[] } | null {
   if (!candidates.length) return null;
-  const used = candidates[0];
-  return {
-    y: used.value,
-    source: used.source,
-    all: candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === 0 })),
-  };
+  const idx = candidates.findIndex(c => !c.missing);
+  const all = candidates.map((c, i) => ({ source: c.source, value: c.value, used: i === idx, missing: c.missing }));
+  if (idx < 0) return { y: 0, source: '', all };  // no resolved y, but preserve candidates for display
+  const used = candidates[idx];
+  return { y: used.value, source: used.source, all };
 }
 
 export function pickW(candidates: WCandidateDef[]): { width: number; source: string; confidence: WidthConfidence; all: ResolveCandidate[] } | null {
@@ -85,11 +84,12 @@ export function buildLandmark(
 
   const yr = pickY(allY);
   const wr = pickW(allW);
+  const yResolved = yr && yr.source !== '';
 
   return {
     id,
-    y: yr?.y ?? null,
-    ySource: yr?.source ?? null,
+    y: yResolved ? yr!.y : null,
+    ySource: yResolved ? yr!.source : null,
     yCandidates: yr?.all ?? [],
     halfW: wr ? wr.width / 2 : null,
     wSource: wr?.source ?? null,
@@ -101,7 +101,8 @@ export function buildLandmark(
 // ── Candidate Helpers ─────────────────────────────────────────────────────────
 
 export function measuredY(R: R, name: string): YCandidateDef[] {
-  return R[name] > 0 ? [{ source: name, value: R[name] }] : [];
+  const val = R[name];
+  return [{ source: name, value: val > 0 ? val : 0, missing: !(val > 0) }];
 }
 
 export function measuredW(R: R, name: string, confidence: WidthConfidence = 'direct'): WCandidateDef[] {

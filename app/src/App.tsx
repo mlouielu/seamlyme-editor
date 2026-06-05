@@ -524,6 +524,23 @@ function Layout() {
     .filter(measurement => !measurement.hasValue || (fileName === NEW_FILE_NAME && measurement.raw === '0'))
     .map(measurement => measurement.name), [doc, fileName]);
 
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      try {
+        const loaded = parseSmis(ev.target!.result as string);
+        dispatch({ type: 'LOAD', doc: loaded, fileName: file.name });
+        document.title = `${file.name} — ${APP_NAME}`;
+      } catch (err) {
+        alert('Could not parse file: ' + (err instanceof Error ? err.message : err));
+      }
+    };
+    reader.readAsText(file);
+  }, [dispatch]);
+
   if (!doc) return (
     <>
       <Header />
@@ -532,7 +549,7 @@ function Layout() {
   );
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
       <Header />
       {import.meta.env.DEV && (
         <div className="debug-toolbar">

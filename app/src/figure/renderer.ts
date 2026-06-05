@@ -171,7 +171,7 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   const pad = 20;
   const bodyHeight = 500;
   const axisX = 160;
-  const scale = bodyHeight / figure.totalHeight;
+  const scale = figure.totalHeight > 0 ? bodyHeight / figure.totalHeight : 1;
   const toY = (height: number) => pad + (figure.totalHeight - height) * scale;
   const pathOpts: PathOptions = {
     axisX,
@@ -379,10 +379,33 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
   addArmGuides(figure.leftArm.landmarks, 'left');
   addArmGuides(figure.rightArm.landmarks, 'right');
 
+  // Collect landmarks that have real width data but no resolved height
+  const seenGhosts = new Set<string>();
+  const ghostItems: { id: string; halfW: number }[] = [];
+  const allLandmarksForGhost: Landmark[] = [
+    ...figure.head.landmarks,
+    ...(figure.torso.neckBack ? [figure.torso.neckBack] : []),
+    ...figure.torso.outline,
+    ...figure.torso.interior,
+    ...figure.lowerBody.hip,
+    ...figure.lowerBody.leg,
+    ...figure.leftArm.landmarks,
+    ...figure.rightArm.landmarks,
+  ];
+  for (const lm of allLandmarksForGhost) {
+    if (seenGhosts.has(lm.id)) continue;
+    if (lm.halfW !== null && lm.widthConfidence !== 'canonical' && !isYReal(lm)) {
+      seenGhosts.add(lm.id);
+      ghostItems.push({ id: lm.id, halfW: lm.halfW });
+    }
+  }
+
   const guideXs = guides.flatMap(guide => guide.xs);
-  const minX = Math.min(...guideXs) - pad;
-  const maxX = Math.max(...guideXs) + pad;
-  const height = bodyHeight + pad * 2;
+  const minX = guideXs.length ? Math.min(...guideXs) - pad : axisX - 60;
+  const maxX = guideXs.length ? Math.max(...guideXs) + pad : axisX + 60;
+  const ghostSpacing = 14;
+  const ghostExtraHeight = ghostItems.length > 0 ? 10 + ghostItems.length * ghostSpacing : 0;
+  const height = bodyHeight + pad * 2 + ghostExtraHeight;
   const labelGap = 12;
   const labelMinY = pad / 2;
   const labelMaxY = height - pad / 2;
@@ -418,5 +441,22 @@ export function renderFigure(doc: SeamlyDocument, opts: RenderOptions): string {
 
   const viewMinX = leftLabelX - labelWidth;
   const viewMaxX = rightLabelX + labelWidth;
+  const floorY = pad + bodyHeight;
+  paths.push(`<line x1="${viewMinX.toFixed(1)}" y1="${floorY}" x2="${viewMaxX.toFixed(1)}" y2="${floorY}" stroke="#94a3b8" stroke-width="1.2"/>`);
+
+  ghostItems.forEach(({ id, halfW }, i) => {
+    const y = floorY + 10 + i * ghostSpacing;
+    const w = halfW * scale;
+    const x1 = (axisX - w).toFixed(1);
+    const x2 = (axisX + w).toFixed(1);
+    paths.push(
+      `<g data-landmark-id="${escXml(id)}" opacity="0.45" style="cursor:pointer">` +
+      `<rect x="${x1}" y="${(y - 6).toFixed(1)}" width="${(w * 2).toFixed(1)}" height="12" fill="transparent"/>` +
+      `<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="4 3"/>` +
+      `<text x="${(axisX + w + 5).toFixed(1)}" y="${(y + 3).toFixed(1)}" font-size="8" font-family="ui-monospace, monospace" fill="#64748b">${escXml(id)}</text>` +
+      `</g>`,
+    );
+  });
+
   return `<svg viewBox="${viewMinX.toFixed(1)} 0 ${(viewMaxX - viewMinX).toFixed(1)} ${height}" xmlns="http://www.w3.org/2000/svg" style="height:100%;width:auto;max-width:100%;display:block">${paths.join('')}</svg>`;
 }
