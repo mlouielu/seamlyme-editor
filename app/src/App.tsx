@@ -524,8 +524,24 @@ function Layout() {
     .filter(measurement => !measurement.hasValue || (fileName === NEW_FILE_NAME && measurement.raw === '0'))
     .map(measurement => measurement.name), [doc, fileName]);
 
+  const [isDragOver, setIsDragOver] = useState(false);
+  const dragCounter = useRef(0);
+
+  const handleDragEnter = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    dragCounter.current += 1;
+    if (dragCounter.current === 1) setIsDragOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    dragCounter.current -= 1;
+    if (dragCounter.current === 0) setIsDragOver(false);
+  }, []);
+
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
+    dragCounter.current = 0;
+    setIsDragOver(false);
     const file = e.dataTransfer.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -549,7 +565,17 @@ function Layout() {
   );
 
   return (
-    <div className="app-shell" onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+    <div className="app-shell" onDragEnter={handleDragEnter} onDragLeave={handleDragLeave} onDragOver={e => e.preventDefault()} onDrop={handleDrop}>
+      {isDragOver && (
+        <div className="drop-overlay" aria-hidden="true">
+          <div className="drop-overlay-inner">
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            <span>Drop to load file</span>
+          </div>
+        </div>
+      )}
       <Header />
       {import.meta.env.DEV && (
         <div className="debug-toolbar">

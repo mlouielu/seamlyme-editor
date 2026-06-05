@@ -145,6 +145,19 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 }
 .recent-item-delete:hover { background: #fee2e2; color: #dc2626; }
 
+/* ── Drop overlay (shown while dragging over loaded workspace) ────────────── */
+.drop-overlay {
+  position: fixed; inset: 0; z-index: 500; pointer-events: none;
+  background: rgba(109, 40, 217, 0.12); border: 3px dashed var(--accent);
+  border-radius: 0; display: flex; align-items: center; justify-content: center;
+}
+.drop-overlay-inner {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  background: var(--surface); border-radius: 16px; padding: 32px 48px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.15); color: var(--accent);
+  font-size: 18px; font-weight: 600;
+}
+
 /* ── Drop zone ────────────────────────────────────────────────────────────── */
 .drop-screen { flex: 1; display: flex; align-items: center; justify-content: center; padding: 40px; }
 .drop-zone {
